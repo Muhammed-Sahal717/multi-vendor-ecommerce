@@ -5,6 +5,10 @@ from .models import User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    last_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
     password = serializers.CharField(
         write_only=True,
         min_length=8,
