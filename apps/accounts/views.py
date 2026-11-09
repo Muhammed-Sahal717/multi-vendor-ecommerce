@@ -10,6 +10,7 @@ from .serializers import (
     ProfileImageSerializer,
     AddressSerializer,
 )
+from django.db import transaction
 
 
 class RegisterView(generics.CreateAPIView):
@@ -71,3 +72,24 @@ class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            address = Address.objects.select_for_update().get(
+                pk=instance.pk,
+                user=self.request.user,
+            )
+
+            was_default = address.is_default
+            address.delete()
+
+            if was_default:
+                next_address = (
+                    Address.objects.filter(user=self.request.user)
+                    .order_by("-created_at", "-id")
+                    .first()
+                )
+
+                if next_address:
+                    next_address.is_default = True
+                    next_address.save(update_fields=["is_default"])
