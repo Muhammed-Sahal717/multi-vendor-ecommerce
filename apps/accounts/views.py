@@ -3,11 +3,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import User, CustomerProfile
+from .models import User, CustomerProfile, Address
 from .serializers import (
     RegisterSerializer,
     CustomerProfileSerializer,
     ProfileImageSerializer,
+    AddressSerializer,
 )
 
 
@@ -51,3 +52,22 @@ class ProfileImageView(generics.UpdateAPIView):
     def get_object(self):
         profile, created = CustomerProfile.objects.get_or_create(user=self.request.user)
         return profile
+
+
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)

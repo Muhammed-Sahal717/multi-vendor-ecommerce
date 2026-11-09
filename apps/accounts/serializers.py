@@ -1,7 +1,8 @@
 from django.contrib.auth import password_validation
 from rest_framework import serializers
+from django.db import transaction
 
-from .models import User, CustomerProfile
+from .models import User, CustomerProfile, Address
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -117,3 +118,44 @@ class ProfileImageSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = [
+            "id",
+            "full_name",
+            "mobile",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "is_default",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+
+        with transaction.atomic():
+            has_addresses = Address.objects.filter(user=user).exists()
+
+            if validated_data.get("is_default", False) or not has_addresses:
+                Address.objects.filter(user=user).update(is_default=False)
+                validated_data["is_default"] = True
+
+            return Address.objects.create(user=user, **validated_data)
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            if validated_data.get("is_default", instance.is_default):
+                Address.objects.filter(user=instance.user).exclude(
+                    pk=instance.pk
+                ).update(is_default=False)
+
+            return super().update(instance, validated_data)
