@@ -4,7 +4,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import User, CustomerProfile
-from .serializers import RegisterSerializer, CustomerProfileSerializer
+from .serializers import (
+    RegisterSerializer,
+    CustomerProfileSerializer,
+    ProfileImageSerializer,
+)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -33,6 +37,16 @@ class MeView(APIView):
 class CustomerProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = CustomerProfileSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        profile, created = CustomerProfile.objects.get_or_create(user=self.request.user)
+        return profile
+
+
+class ProfileImageView(generics.UpdateAPIView):
+    serializer_class = ProfileImageSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["patch", "options"]
 
     def get_object(self):
         profile, created = CustomerProfile.objects.get_or_create(user=self.request.user)

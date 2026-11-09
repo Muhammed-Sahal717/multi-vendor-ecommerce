@@ -92,3 +92,28 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
             instance.user.save()
 
         return super().update(instance, validated_data)
+
+
+class ProfileImageSerializer(serializers.ModelSerializer):
+    profile_image = serializers.ImageField(
+        required=True,
+        allow_null=False,
+    )
+
+    class Meta:
+        model = CustomerProfile
+        fields = ["profile_image"]
+
+    def validate_profile_image(self, value):
+        max_size = 5 * 1024 * 1024  # 5 MB
+        allowed_formats = {"JPEG", "PNG", "WEBP"}
+
+        if value.size > max_size:
+            raise serializers.ValidationError("Image size cannot exceed 5 MB.")
+
+        if value.image.format not in allowed_formats:
+            raise serializers.ValidationError(
+                "Only JPEG, PNG, and WebP images are allowed."
+            )
+
+        return value
