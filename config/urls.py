@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),
     path("api/accounts/", include("apps.accounts.urls")),
     path("api/sellers/", include("apps.sellers.urls")),
+    path("api/catalog/", include("apps.catalog.urls")),
 ]
 
 if settings.DEBUG:

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "apps.accounts.apps.AccountsConfig",
     "apps.sellers.apps.SellersConfig",
+    "apps.catalog.apps.CatalogConfig",
 ]
 
 MIDDLEWARE = [
