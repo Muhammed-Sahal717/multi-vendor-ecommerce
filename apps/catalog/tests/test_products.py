@@ -88,7 +88,7 @@ class ProductAPITests(APITestCase):
         self.assertEqual(product.seller, self.seller)
         self.assertEqual(product.status, Product.Status.PENDING)
 
-    def test_seller_cannot_create_product_for_another_seller(self):
+    def test_seller_cannot_submit_another_sellers_id(self):
         self.client.force_authenticate(user=self.seller_user)
 
         response = self.client.post(
@@ -105,10 +105,8 @@ class ProductAPITests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-        product = Product.objects.get(sku="TILE-003")
-        self.assertEqual(product.seller, self.seller)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Product.objects.filter(sku="TILE-003").exists())
 
     def test_seller_cannot_access_another_sellers_product(self):
         other_product = Product.objects.create(
@@ -158,7 +156,7 @@ class ProductAPITests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.PENDING)
@@ -172,3 +170,98 @@ class ProductAPITests(APITestCase):
         response = self.client.get(self.seller_url)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_seller_cannot_submit_approved_status(self):
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.post(
+            self.seller_url,
+            {
+                "category": str(self.category.id),
+                "name": "Restricted Tile",
+                "sku": "TILE-RESTRICTED",
+                "description": "Test product",
+                "price": "100.00",
+                "stock": 10,
+                "status": "approved",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_seller_cannot_modify_rejection_reason(self):
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"rejection_reason": "Ignore rejection"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_seller_cannot_change_product_owner(self):
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"seller": str(self.other_seller.id)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    def test_changing_price_requires_reapproval(self):
+        self.product.status = Product.Status.APPROVED
+        self.product.save()
+
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"price": "180.00"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.status, Product.Status.PENDING)
+
+
+    def test_changing_stock_does_not_require_reapproval(self):
+        self.product.status = Product.Status.APPROVED
+        self.product.save()
+
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"stock": 100},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.status, Product.Status.APPROVED)
+
+
+    def test_changing_category_requires_reapproval(self):
+        self.product.status = Product.Status.APPROVED
+        self.product.save()
+
+        new_category = Category.objects.create(name="Wall Tiles")
+
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"category": str(new_category.id)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.status, Product.Status.PENDING)

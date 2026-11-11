@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import Category, Product, ProductImage
-
+from django.db import transaction
 from apps.sellers.models import SellerProfile
+from PIL import Image, UnidentifiedImageError
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -83,23 +84,6 @@ class ProductSerializer(serializers.ModelSerializer):
         return category
 
     def validate(self, attrs):
-        if self.instance is None:
-            return attrs
-
-        if (
-            self.instance.status == Product.Status.APPROVED
-            and "category" in attrs
-            and attrs["category"] != self.instance.category
-        ):
-            raise serializers.ValidationError(
-                {
-                    "category": (
-                        "Changing the category of an approved product "
-                        "requires admin review."
-                    )
-                }
-            )
-
         return attrs
 
     def create(self, validated_data):
@@ -111,6 +95,53 @@ class ProductSerializer(serializers.ModelSerializer):
             seller=seller,
             **validated_data,
         )
+
+    def to_internal_value(self, data):
+        protected_fields = {
+            "seller",
+            "status",
+            "rejection_reason",
+            "slug",
+        }
+
+        submitted_fields = protected_fields.intersection(data.keys())
+
+        if submitted_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field cannot be modified directly."
+                    for field in submitted_fields
+                }
+            )
+
+        return super().to_internal_value(data)
+
+    def update(self, instance, validated_data):
+        sensitive_fields = {
+            "name",
+            "category",
+            "sku",
+            "description",
+            "price",
+        }
+
+        requires_reapproval = instance.status == Product.Status.APPROVED and any(
+            field in validated_data
+            and validated_data[field] != getattr(instance, field)
+            for field in sensitive_fields
+        )
+
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+
+            if requires_reapproval:
+                instance.status = Product.Status.PENDING
+                instance.rejection_reason = ""
+
+            instance.save()
+
+        return instance
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
@@ -169,15 +200,27 @@ class ProductImageSerializer(serializers.ModelSerializer):
         if image.size > max_size:
             raise serializers.ValidationError("Image size cannot exceed 5 MB.")
 
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-        ]
+        allowed_formats = {
+            "JPEG",
+            "PNG",
+            "WEBP",
+        }
 
-        if image.content_type not in allowed_types:
-            raise serializers.ValidationError(
-                "Only JPEG, PNG, and WebP images are allowed."
-            )
+        try:
+            image.seek(0)
+
+            with Image.open(image) as img:
+                if img.format not in allowed_formats:
+                    raise serializers.ValidationError(
+                        "Only JPEG, PNG, and WebP images are allowed."
+                    )
+
+                img.verify()
+
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+            raise serializers.ValidationError("The uploaded file is not a valid image.")
+
+        finally:
+            image.seek(0)
 
         return image

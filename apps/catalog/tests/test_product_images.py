@@ -187,9 +187,7 @@ class ProductImageAPITests(APITestCase):
             display_order=2,
         )
 
-        response = self.client.delete(
-            f"{self.url}{second.id}/"
-        )
+        response = self.client.delete(f"{self.url}{second.id}/")
 
         self.assertEqual(
             response.status_code,
@@ -245,3 +243,21 @@ class ProductImageAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_fake_image_file_is_rejected(self):
+        fake_image = SimpleUploadedFile(
+            "fake.png",
+            b"This is not a real image",
+            content_type="image/png",
+        )
+
+        response = self.client.post(
+            self.url,
+            {"image": fake_image},
+            format="multipart",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )

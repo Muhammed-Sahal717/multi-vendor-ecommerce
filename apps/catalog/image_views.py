@@ -27,10 +27,14 @@ class SellerProductImageListCreateView(ListCreateAPIView):
         ).select_related("product")
 
     def perform_create(self, serializer):
-        product = self.get_product()
-
         try:
             with transaction.atomic():
+                product = get_object_or_404(
+                    Product.objects.select_for_update(),
+                    slug=self.kwargs["slug"],
+                    seller__user=self.request.user,
+                )
+
                 if serializer.validated_data.get("is_primary"):
                     ProductImage.objects.filter(
                         product=product,
@@ -38,6 +42,11 @@ class SellerProductImageListCreateView(ListCreateAPIView):
                     ).update(is_primary=False)
 
                 serializer.save(product=product)
+
+                if product.status == Product.Status.APPROVED:
+                    product.status = Product.Status.PENDING
+                    product.rejection_reason = ""
+                    product.save(update_fields=["status", "rejection_reason"])
 
         except IntegrityError:
             raise ValidationError("Unable to save product image. Please try again.")
@@ -52,21 +61,46 @@ class SellerProductImageDetailView(RetrieveDestroyAPIView):
             product__seller__user=self.request.user,
             product__slug=self.kwargs["slug"],
         )
+
     def perform_destroy(self, instance):
-        product = instance.product
-        was_primary = instance.is_primary
-
-        with transaction.atomic():
-            instance.delete()
-
-            if was_primary:
-                next_image = (
-                    ProductImage.objects
-                    .filter(product=product)
-                    .order_by("display_order", "created_at")
-                    .first()
+        try:
+            with transaction.atomic():
+                product = get_object_or_404(
+                    Product.objects.select_for_update(),
+                    pk=instance.product_id,
+                    seller__user=self.request.user,
                 )
 
-                if next_image:
-                    next_image.is_primary = True
-                    next_image.save(update_fields=["is_primary"])
+                image = get_object_or_404(
+                    ProductImage.objects.select_for_update(),
+                    pk=instance.pk,
+                    product=product,
+                )
+
+                was_primary = image.is_primary
+                image_name = image.image.name
+                image_storage = image.image.storage
+
+                image.delete()
+
+                if was_primary:
+                    next_image = (
+                        ProductImage.objects.filter(product=product)
+                        .order_by("display_order", "created_at")
+                        .first()
+                    )
+
+                    if next_image:
+                        next_image.is_primary = True
+                        next_image.save(update_fields=["is_primary"])
+
+                if product.status == Product.Status.APPROVED:
+                    product.status = Product.Status.PENDING
+                    product.rejection_reason = ""
+                    product.save(update_fields=["status", "rejection_reason"])
+
+                # Delete the physical file only after the DB transaction commits.
+                transaction.on_commit(lambda: image_storage.delete(image_name))
+
+        except IntegrityError:
+            raise ValidationError("Unable to delete product image. Please try again.")
