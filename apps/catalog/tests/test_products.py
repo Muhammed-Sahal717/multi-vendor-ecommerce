@@ -136,7 +136,8 @@ class ProductAPITests(APITestCase):
         response = self.client.get(self.public_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, [])
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
 
     def test_approved_product_is_publicly_visible(self):
         self.product.status = Product.Status.APPROVED
@@ -145,7 +146,8 @@ class ProductAPITests(APITestCase):
         response = self.client.get(self.public_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_seller_cannot_approve_own_product(self):
         self.client.force_authenticate(user=self.seller_user)
@@ -211,6 +213,7 @@ class ProductAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_changing_price_requires_reapproval(self):
         self.product.status = Product.Status.APPROVED
         self.product.save()
@@ -228,7 +231,6 @@ class ProductAPITests(APITestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.PENDING)
 
-
     def test_changing_stock_does_not_require_reapproval(self):
         self.product.status = Product.Status.APPROVED
         self.product.save()
@@ -245,7 +247,6 @@ class ProductAPITests(APITestCase):
 
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.APPROVED)
-
 
     def test_changing_category_requires_reapproval(self):
         self.product.status = Product.Status.APPROVED

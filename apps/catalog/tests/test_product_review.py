@@ -187,3 +187,37 @@ class AdminProductReviewTests(APITestCase):
 
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.PENDING)
+
+    def test_admin_cannot_approve_product_from_suspended_seller(self):
+        self.seller.status = SellerProfile.Status.SUSPENDED
+        self.seller.save()
+
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "approved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.status, Product.Status.PENDING)
+
+    def test_admin_cannot_approve_product_in_inactive_category(self):
+        self.category.is_active = False
+        self.category.save()
+
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "approved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.status, Product.Status.PENDING)

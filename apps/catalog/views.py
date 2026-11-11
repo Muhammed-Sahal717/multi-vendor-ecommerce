@@ -30,6 +30,12 @@ from .serializers import (
     ProductReviewSerializer,
     ProductSerializer,
 )
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
+from .filters import ProductFilter
+from .pagination import ProductPagination
+from rest_framework.exceptions import ValidationError
 
 
 class CategoryListCreateView(ListCreateAPIView):
@@ -60,15 +66,43 @@ class CategoryDetailView(RetrieveUpdateDestroyAPIView):
             return [IsPlatformAdmin()]
 
         return [IsAuthenticatedOrReadOnly()]
+    def perform_destroy(self, instance):
+        if instance.subcategories.filter(is_active=True).exists():
+            raise ValidationError(
+                "Deactivate or remove active subcategories first."
+            )
+
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])
 
 
 class SellerProductListCreateView(ListCreateAPIView):
     serializer_class = ProductSerializer
     permission_classes = [IsActiveSeller]
 
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+
+    filterset_fields = ["status", "category", "is_active"]
+
+    search_fields = ["name", "sku", "description"]
+
+    ordering_fields = ["price", "created_at", "name", "stock"]
+
+    ordering = ["-created_at"]
+    pagination_class = ProductPagination
+
     def get_queryset(self):
-        return Product.objects.filter(seller__user=self.request.user).select_related(
-            "seller", "category"
+        return (
+            Product.objects.filter(seller__user=self.request.user)
+            .select_related(
+                "seller",
+                "category",
+            )
+            .prefetch_related("images")
         )
 
     def perform_create(self, serializer):
@@ -90,13 +124,43 @@ class PublicProductListView(ListAPIView):
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
 
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+
+    filterset_class = ProductFilter
+
+    search_fields = [
+        "name",
+        "description",
+        "seller__business_name",
+    ]
+
+    ordering_fields = [
+        "price",
+        "created_at",
+        "name",
+    ]
+
+    ordering = ["-created_at"]
+    pagination_class = ProductPagination
+
     def get_queryset(self):
-        return Product.objects.filter(
-            status=Product.Status.APPROVED,
-            is_active=True,
-            seller__status=SellerProfile.Status.ACTIVE,
-            category__is_active=True,
-        ).select_related("seller", "category")
+        return (
+            Product.objects.filter(
+                status=Product.Status.APPROVED,
+                is_active=True,
+                seller__status=SellerProfile.Status.ACTIVE,
+                category__is_active=True,
+            )
+            .select_related(
+                "seller",
+                "category",
+            )
+            .prefetch_related("images")
+        )
 
 
 class PublicProductDetailView(RetrieveAPIView):
@@ -144,6 +208,17 @@ class AdminProductReviewView(APIView):
             if product.status != Product.Status.PENDING:
                 return Response(
                     {"detail": "This product has already been reviewed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if product.seller.status != SellerProfile.Status.ACTIVE:
+                return Response(
+                    {"detail": "Cannot approve a product from an inactive seller."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not product.category.is_active:
+                return Response(
+                    {"detail": "Cannot approve a product in an inactive category."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
