@@ -10,6 +10,10 @@ from .views import (
     AdminProductListView,
     AdminProductReviewView,
 )
+from .image_views import (
+    SellerProductImageListCreateView,
+    SellerProductImageDetailView,
+)
 
 urlpatterns = [
     path("categories/", CategoryListCreateView.as_view(), name="category-list"),
@@ -47,5 +51,15 @@ urlpatterns = [
         "admin/products/<slug:slug>/review/",
         AdminProductReviewView.as_view(),
         name="admin-product-review",
+    ),
+    path(
+        "seller/products/<slug:slug>/images/",
+        SellerProductImageListCreateView.as_view(),
+        name="seller-product-image-list",
+    ),
+    path(
+        "seller/products/<slug:slug>/images/<uuid:pk>/",
+        SellerProductImageDetailView.as_view(),
+        name="seller-product-image-detail",
     ),
 ]

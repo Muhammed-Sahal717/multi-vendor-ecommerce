@@ -1,6 +1,5 @@
 from rest_framework import serializers
-
-from .models import Category, Product
+from .models import Category, Product, ProductImage
 
 from apps.sellers.models import SellerProfile
 
@@ -144,3 +143,41 @@ class ProductReviewSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = [
+            "id",
+            "product",
+            "image",
+            "is_primary",
+            "display_order",
+            "created_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "product",
+            "created_at",
+        ]
+
+    def validate_image(self, image):
+        max_size = 5 * 1024 * 1024
+
+        if image.size > max_size:
+            raise serializers.ValidationError("Image size cannot exceed 5 MB.")
+
+        allowed_types = [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+        ]
+
+        if image.content_type not in allowed_types:
+            raise serializers.ValidationError(
+                "Only JPEG, PNG, and WebP images are allowed."
+            )
+
+        return image
