@@ -53,3 +53,55 @@ class SellerApplicationSerializer(serializers.ModelSerializer):
             user=self.context["request"].user,
             **validated_data,
         )
+
+
+class AdminSellerApplicationSerializer(serializers.ModelSerializer):
+    applicant_email = serializers.EmailField(
+        source="user.email",
+        read_only=True,
+    )
+
+    applicant_name = serializers.CharField(
+        source="user.get_full_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = SellerApplication
+        fields = [
+            "id",
+            "applicant_email",
+            "applicant_name",
+            "business_name",
+            "business_type",
+            "business_email",
+            "business_phone",
+            "business_address",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "website",
+            "description",
+            "status",
+            "reviewed_by",
+            "review_notes",
+            "submitted_at",
+            "reviewed_at",
+        ]
+
+        read_only_fields = fields
+
+
+class SellerApplicationReviewSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[
+            SellerApplication.Status.APPROVED,
+            SellerApplication.Status.REJECTED,
+        ]
+    )
+
+    review_notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
