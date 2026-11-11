@@ -133,3 +133,55 @@ class SellerAdminReviewTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_superadmin_can_list_applications(self):
+        superadmin = User.objects.create_superuser(
+            email="superadmin@example.com",
+            password="StrongPassword123!",
+        )
+
+        self.client.force_authenticate(user=superadmin)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_seller_cannot_list_applications(self):
+        seller = User.objects.create_user(
+            email="seller@example.com",
+            password="StrongPassword123!",
+            role=User.Role.SELLER,
+        )
+
+        self.client.force_authenticate(user=seller)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_seller_cannot_review_application(self):
+        seller = User.objects.create_user(
+            email="seller@example.com",
+            password="StrongPassword123!",
+            role=User.Role.SELLER,
+        )
+
+        self.client.force_authenticate(user=seller)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "approved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_user_cannot_list_applications(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )

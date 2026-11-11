@@ -14,10 +14,11 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 
 from .models import SellerApplication, SellerProfile
-from .permissions import IsPlatformAdmin
+from .permissions import IsPlatformAdmin, IsActiveSeller
 from .serializers import (
     AdminSellerApplicationSerializer,
     SellerApplicationReviewSerializer,
+    SellerProfileSerializer,
 )
 
 
@@ -115,3 +116,12 @@ class AdminSellerApplicationReviewView(APIView):
             AdminSellerApplicationSerializer(application).data,
             status=status.HTTP_200_OK,
         )
+
+
+class SellerProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = SellerProfileSerializer
+    permission_classes = [IsActiveSeller]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_object(self):
+        return SellerProfile.objects.get(user=self.request.user)

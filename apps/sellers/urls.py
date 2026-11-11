@@ -3,7 +3,7 @@ from .views import (
     AdminSellerApplicationListView,
     AdminSellerApplicationReviewView,
 )
-from .views import SellerApplicationCreateView
+from .views import SellerApplicationCreateView, SellerProfileView
 
 urlpatterns = [
     path(
@@ -20,5 +20,10 @@ urlpatterns = [
         "admin/applications/<uuid:pk>/review/",
         AdminSellerApplicationReviewView.as_view(),
         name="admin-seller-application-review",
+    ),
+    path(
+        "profile/",
+        SellerProfileView.as_view(),
+        name="seller-profile",
     ),
 ]
