@@ -20,12 +20,14 @@ class CartItemCreateView(generics.CreateAPIView):
     serializer_class = CartItemSerializer
     permission_classes = [IsCustomer]
 
-    def perform_create(self, serializer):
-        cart, _ = Cart.objects.get_or_create(
-            user=self.request.user
-        )
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        cart, _ = Cart.objects.get_or_create(user=self.request.user)
+        context["cart"] = cart
+        return context
 
-        serializer.context["cart"] = cart
+    def perform_create(self, serializer):
+        cart = self.request.user.cart
 
         try:
             with transaction.atomic():
