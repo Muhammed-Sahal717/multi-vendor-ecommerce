@@ -25,3 +25,13 @@ class CartDetailTests(CartTestBase):
         response = self.client.get("/api/cart/")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_empty_cart_returns_zero_totals(self):
+        self.client.force_authenticate(self.customer)
+
+        response = self.client.get("/api/cart/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["items"], [])
+        self.assertEqual(response.data["total_items"], 0)
+        self.assertEqual(response.data["total_price"], 0)

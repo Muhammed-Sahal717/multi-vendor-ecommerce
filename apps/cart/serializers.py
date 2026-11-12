@@ -15,6 +15,11 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     subtotal = serializers.SerializerMethodField()
+    product_stock = serializers.IntegerField(
+        source="product.stock",
+        read_only=True,
+    )
+    is_available = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
@@ -25,6 +30,8 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_slug",
             "product_price",
             "quantity",
+            "product_stock",
+            "is_available",
             "subtotal",
             "created_at",
             "updated_at",
@@ -41,6 +48,17 @@ class CartItemSerializer(serializers.ModelSerializer):
 
     def get_subtotal(self, obj):
         return obj.product.price * obj.quantity
+
+    def get_is_available(self, obj):
+        product = obj.product
+
+        return (
+            product.status == "approved"
+            and product.is_active
+            and product.seller.status == "active"
+            and product.category.is_active
+            and product.stock >= obj.quantity
+        )
 
     def validate(self, attrs):
         product = attrs.get(
@@ -77,28 +95,30 @@ class CartItemSerializer(serializers.ModelSerializer):
         cart = self.context.get("cart")
 
         if cart is None:
-            cart = self.context["request"].user.cart
+            cart = Cart.objects.filter(user=self.context["request"].user).first()
 
-        duplicate = CartItem.objects.filter(
-            cart=cart,
-            product=product,
-        )
-
-        if self.instance:
-            duplicate = duplicate.exclude(pk=self.instance.pk)
-
-        if duplicate.exists():
-            raise serializers.ValidationError(
-                {
-                    "product": (
-                        "This product is already in your cart. "
-                        "Update its quantity instead."
-                    )
-                }
+        if cart:
+            duplicate = CartItem.objects.filter(
+                cart=cart,
+                product=product,
             )
+
+            if self.instance:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+
+            if duplicate.exists():
+                raise serializers.ValidationError(
+                    {
+                        "product": (
+                            "This product is already in your cart. "
+                            "Update its quantity instead."
+                        )
+                    }
+                )
 
         attrs["product"] = product
         return attrs
+
     def get_fields(self):
         fields = super().get_fields()
 
@@ -106,6 +126,19 @@ class CartItemSerializer(serializers.ModelSerializer):
             fields["product"].read_only = True
 
         return fields
+
+    def to_internal_value(self, data):
+        if self.instance and "product" in data:
+            raise serializers.ValidationError(
+                {
+                    "product": (
+                        "You cannot change a cart item's product. "
+                        "Remove the item and add another product."
+                    )
+                }
+            )
+
+        return super().to_internal_value(data)
 
 
 class CartSerializer(serializers.ModelSerializer):

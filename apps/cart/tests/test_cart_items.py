@@ -99,3 +99,105 @@ class CartItemTests(CartTestBase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_inactive_product_cannot_be_added(self):
+        self.product.is_active = False
+        self.product.save()
+
+        response = self.client.post(
+            "/api/cart/items/",
+            {"product": str(self.product.id), "quantity": 1},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_pending_product_cannot_be_added(self):
+        self.product.status = "pending"
+        self.product.save()
+
+        response = self.client.post(
+            "/api/cart/items/",
+            {"product": str(self.product.id), "quantity": 1},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_inactive_seller_product_cannot_be_added(self):
+        self.seller.status = "suspended"
+        self.seller.save()
+
+        response = self.client.post(
+            "/api/cart/items/",
+            {"product": str(self.product.id), "quantity": 1},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_inactive_category_product_cannot_be_added(self):
+        self.category.is_active = False
+        self.category.save()
+
+        response = self.client.post(
+            "/api/cart/items/",
+            {"product": str(self.product.id), "quantity": 1},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_cart_item_product_cannot_be_changed(self):
+        cart = Cart.objects.create(user=self.customer)
+        item = CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            quantity=2,
+        )
+
+        response = self.client.patch(
+            f"/api/cart/items/{item.id}/",
+            {"product": str(self.product.id), "quantity": 3},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        item.refresh_from_db()
+        self.assertEqual(item.product_id, self.product.id)
+        self.assertEqual(item.quantity, 2)
+
+    def test_cart_returns_correct_total(self):
+        self.client.post(
+            "/api/cart/items/",
+            {"product": str(self.product.id), "quantity": 3},
+        )
+
+        response = self.client.get("/api/cart/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["total_items"], 3)
+        self.assertEqual(str(response.data["total_price"]), "300.00")
+
+    def test_invalid_product_does_not_create_cart(self):
+        response = self.client.post(
+            "/api/cart/items/",
+            {
+                "product": "00000000-0000-0000-0000-000000000000",
+                "quantity": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Cart.objects.filter(user=self.customer).exists())
+
+    def test_unavailable_item_is_flagged_in_cart_response(self):
+        cart = Cart.objects.create(user=self.customer)
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            quantity=2,
+        )
+
+        self.product.stock = 1
+        self.product.save()
+
+        response = self.client.get("/api/cart/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["items"][0]["is_available"])
