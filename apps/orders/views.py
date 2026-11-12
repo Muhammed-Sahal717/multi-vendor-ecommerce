@@ -1,14 +1,20 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.cart.permissions import IsCustomer
-from apps.orders.serializers import CheckoutSerializer, OrderSerializer
+from apps.orders.models import Order, OrderItem
+from apps.orders.serializers import (
+    CheckoutSerializer,
+    OrderSerializer,
+    SellerOrderItemSerializer,
+    SellerOrderStatusSerializer,
+)
 from apps.orders.services import create_order
-from apps.orders.models import Order
 from apps.sellers.permissions import IsActiveSeller
-from apps.orders.models import OrderItem
-from apps.orders.serializers import SellerOrderItemSerializer
 
 
 class CheckoutView(generics.GenericAPIView):
@@ -69,3 +75,39 @@ class SellerOrderDetailView(generics.RetrieveAPIView):
         return OrderItem.objects.filter(seller__user=self.request.user).select_related(
             "order", "product", "seller"
         )
+
+
+class SellerOrderStatusUpdateView(generics.UpdateAPIView):
+    serializer_class = SellerOrderStatusSerializer
+    permission_classes = [IsAuthenticated, IsActiveSeller]
+    http_method_names = ["patch", "options", "head"]
+    lookup_field = "pk"
+
+    def get_queryset(self):
+        return OrderItem.objects.filter(
+            seller__user=self.request.user,
+            seller__status="active",
+        )
+
+    def update(self, request, *args, **kwargs):
+        with transaction.atomic():
+            queryset = self.filter_queryset(self.get_queryset()).select_for_update()
+
+            lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+
+            self.object = get_object_or_404(
+                queryset,
+                **{lookup_url_kwarg: self.kwargs[lookup_url_kwarg]},
+            )
+
+            self.check_object_permissions(request, self.object)
+
+            serializer = self.get_serializer(
+                self.object,
+                data=request.data,
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+
+            return Response(serializer.data)

@@ -139,3 +139,37 @@ class SellerOrderItemSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class SellerOrderStatusSerializer(serializers.ModelSerializer):
+    ALLOWED_TRANSITIONS = {
+        OrderItem.Status.PENDING: [
+            OrderItem.Status.CONFIRMED,
+            OrderItem.Status.CANCELLED,
+        ],
+        OrderItem.Status.CONFIRMED: [
+            OrderItem.Status.PROCESSING,
+            OrderItem.Status.CANCELLED,
+        ],
+        OrderItem.Status.PROCESSING: [
+            OrderItem.Status.SHIPPED,
+            OrderItem.Status.CANCELLED,
+        ],
+        OrderItem.Status.SHIPPED: [
+            OrderItem.Status.DELIVERED,
+        ],
+        OrderItem.Status.DELIVERED: [],
+        OrderItem.Status.CANCELLED: [],
+    }
+
+    class Meta:
+        model = OrderItem
+        fields = ["status"]
+
+    def validate_status(self, value):
+        if value not in self.ALLOWED_TRANSITIONS.get(self.instance.status, []):
+            raise serializers.ValidationError(
+                f"Cannot change status from '{self.instance.status}' to '{value}'."
+            )
+
+        return value
