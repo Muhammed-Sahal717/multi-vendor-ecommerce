@@ -74,7 +74,10 @@ class CartItemSerializer(serializers.ModelSerializer):
                 {"quantity": (f"Only {product.stock} items are currently available.")}
             )
 
-        cart = self.context["request"].user.cart
+        cart = self.context.get("cart")
+
+        if cart is None:
+            cart = self.context["request"].user.cart
 
         duplicate = CartItem.objects.filter(
             cart=cart,
@@ -96,6 +99,13 @@ class CartItemSerializer(serializers.ModelSerializer):
 
         attrs["product"] = product
         return attrs
+    def get_fields(self):
+        fields = super().get_fields()
+
+        if self.instance:
+            fields["product"].read_only = True
+
+        return fields
 
 
 class CartSerializer(serializers.ModelSerializer):
