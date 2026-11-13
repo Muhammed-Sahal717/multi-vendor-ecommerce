@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.db import transaction
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.cart.models import Cart, CartItem
 from apps.catalog.models import Product
@@ -172,3 +172,43 @@ def update_order_status(*, order_id):
         order.save(update_fields=["status", "updated_at"])
 
     return order
+
+
+@transaction.atomic
+def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
+    # Lock the item and verify seller ownership.
+    try:
+        order_item = (
+            OrderItem.objects.select_for_update()
+            .select_related("order")
+            .get(
+                id=order_item_id,
+                seller__user=seller_user,
+                seller__status="active",
+            )
+        )
+    except OrderItem.DoesNotExist:
+        raise NotFound("Order item not found.")
+
+    # Validate the requested transition.
+    from apps.orders.serializers import SellerOrderStatusSerializer
+
+    serializer = SellerOrderStatusSerializer(
+        order_item,
+        data={"status": new_status},
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+
+    # Restore stock only when transitioning to cancelled.
+    if new_status == OrderItem.Status.CANCELLED:
+        product = Product.objects.select_for_update().get(id=order_item.product_id)
+        product.stock += order_item.quantity
+        product.save(update_fields=["stock", "updated_at"])
+
+    serializer.save()
+
+    # Recalculate the parent order.
+    update_order_status(order_id=order_item.order_id)
+
+    return order_item

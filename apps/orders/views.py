@@ -13,7 +13,7 @@ from apps.orders.serializers import (
     SellerOrderItemSerializer,
     SellerOrderStatusSerializer,
 )
-from apps.orders.services import create_order, update_order_status
+from apps.orders.services import create_order, update_seller_order_item_status
 from apps.sellers.permissions import IsActiveSeller
 
 
@@ -90,24 +90,13 @@ class SellerOrderStatusUpdateView(generics.UpdateAPIView):
         )
 
     def update(self, request, *args, **kwargs):
-        with transaction.atomic():
-            queryset = self.filter_queryset(self.get_queryset()).select_for_update()
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
 
-            lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        order_item = update_seller_order_item_status(
+            order_item_id=self.kwargs[lookup_url_kwarg],
+            seller_user=request.user,
+            new_status=request.data.get("status"),
+        )
 
-            self.object = get_object_or_404(
-                queryset,
-                **{lookup_url_kwarg: self.kwargs[lookup_url_kwarg]},
-            )
-
-            self.check_object_permissions(request, self.object)
-
-            serializer = self.get_serializer(
-                self.object,
-                data=request.data,
-                partial=True,
-            )
-            serializer.is_valid(raise_exception=True)
-            self.perform_update(serializer)
-            update_order_status(order_id=self.object.order_id)
-            return Response(serializer.data)
+        serializer = self.get_serializer(order_item)
+        return Response(serializer.data)

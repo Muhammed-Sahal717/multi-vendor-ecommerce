@@ -1,7 +1,8 @@
 from rest_framework import status
 
-from apps.orders.models import OrderItem
+from apps.orders.models import OrderItem, Order
 from apps.orders.tests.base import OrderTestBase
+from unittest.mock import patch
 
 
 class SellerOrderStatusTests(OrderTestBase):
@@ -240,3 +241,100 @@ class SellerOrderStatusTests(OrderTestBase):
             self.order_item.order.status,
             "partially_delivered",
         )
+
+    def test_cancelling_item_restores_product_stock(self):
+        self.product.refresh_from_db()
+        stock_after_checkout = self.product.stock
+
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(
+            self.product.stock,
+            stock_after_checkout + self.order_item.quantity,
+        )
+
+    def test_cancelling_item_twice_does_not_restore_stock_twice(self):
+        response = self.update_status("cancelled")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        stock_after_cancellation = self.product.stock
+
+        response = self.update_status("cancelled")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.product.refresh_from_db()
+        self.assertEqual(
+            self.product.stock,
+            stock_after_cancellation,
+        )
+
+    def test_confirming_item_does_not_change_stock(self):
+        self.product.refresh_from_db()
+        stock_before = self.product.stock
+
+        response = self.update_status("confirmed")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, stock_before)
+
+    def test_failed_transition_does_not_change_stock(self):
+        self.product.refresh_from_db()
+        stock_before = self.product.stock
+
+        response = self.update_status("shipped")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, stock_before)
+
+    def test_another_seller_cannot_restore_product_stock(self):
+        second_product = self.create_second_seller_product()
+
+        second_item = OrderItem.objects.create(
+            order=self.order_item.order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+        )
+
+        second_product.refresh_from_db()
+        stock_before = second_product.stock
+
+        response = self.client.patch(
+            f"/api/orders/seller/{second_item.id}/status/",
+            {"status": "cancelled"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        second_product.refresh_from_db()
+        self.assertEqual(second_product.stock, stock_before)
+
+    @patch(
+        "apps.orders.services.update_order_status",
+        side_effect=Exception("Simulated aggregation failure"),
+    )
+    def test_cancellation_rolls_back_stock_and_status(self, mock_update):
+        self.product.refresh_from_db()
+        stock_before = self.product.stock
+
+        with self.assertRaises(Exception):
+            self.update_status("cancelled")
+
+        self.product.refresh_from_db()
+        self.order_item.refresh_from_db()
+
+        self.assertEqual(self.product.stock, stock_before)
+        self.assertEqual(self.order_item.status, "pending")
