@@ -13,7 +13,7 @@ from apps.orders.serializers import (
     SellerOrderItemSerializer,
     SellerOrderStatusSerializer,
 )
-from apps.orders.services import create_order
+from apps.orders.services import create_order, update_order_status
 from apps.sellers.permissions import IsActiveSeller
 
 
@@ -109,5 +109,5 @@ class SellerOrderStatusUpdateView(generics.UpdateAPIView):
             )
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-
+            update_order_status(order_id=self.object.order_id)
             return Response(serializer.data)

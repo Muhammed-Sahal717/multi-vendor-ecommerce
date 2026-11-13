@@ -116,3 +116,59 @@ def create_order(*, user, address, payment_method):
     CartItem.objects.filter(cart=cart).delete()
 
     return order
+
+
+def calculate_order_status(item_statuses):
+    statuses = list(item_statuses)
+
+    if not statuses:
+        raise ValueError("Cannot calculate order status without order items.")
+
+    status_set = set(statuses)
+
+    # All items have the same status.
+    if len(status_set) == 1:
+        return statuses[0]
+
+    # All items are cancelled.
+    if status_set == {OrderItem.Status.CANCELLED}:
+        return Order.Status.CANCELLED
+
+    # Some items are cancelled, others are not.
+    if OrderItem.Status.CANCELLED in status_set:
+        return Order.Status.PARTIALLY_CANCELLED
+
+    # Some items are delivered, others are not.
+    if OrderItem.Status.DELIVERED in status_set:
+        return Order.Status.PARTIALLY_DELIVERED
+
+    # Some items are shipped, others are not.
+    if OrderItem.Status.SHIPPED in status_set:
+        return Order.Status.PARTIALLY_SHIPPED
+
+    # Remaining combinations: pending, confirmed, processing.
+    priority = {
+        OrderItem.Status.PENDING: 1,
+        OrderItem.Status.CONFIRMED: 2,
+        OrderItem.Status.PROCESSING: 3,
+    }
+
+    return min(statuses, key=lambda status: priority[status])
+
+
+@transaction.atomic
+def update_order_status(*, order_id):
+    order = Order.objects.select_for_update().get(id=order_id)
+
+    item_statuses = OrderItem.objects.filter(order=order).values_list(
+        "status",
+        flat=True,
+    )
+
+    new_status = calculate_order_status(item_statuses)
+
+    if order.status != new_status:
+        order.status = new_status
+        order.save(update_fields=["status", "updated_at"])
+
+    return order
