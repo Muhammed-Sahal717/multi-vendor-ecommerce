@@ -138,3 +138,105 @@ class SellerOrderStatusTests(OrderTestBase):
         response = self.update_status("invalid_status")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirming_item_updates_parent_order(self):
+        response = self.update_status("confirmed")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.order_item.order.refresh_from_db()
+        self.assertEqual(
+            self.order_item.order.status,
+            "confirmed",
+        )
+
+    def test_cancelling_only_item_cancels_parent_order(self):
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.order_item.order.refresh_from_db()
+        self.assertEqual(
+            self.order_item.order.status,
+            "cancelled",
+        )
+
+    def test_cancelling_one_of_multiple_items_partially_cancels_order(self):
+        second_product = self.create_second_seller_product()
+
+        OrderItem.objects.create(
+            order=self.order_item.order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+        )
+
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.order_item.order.refresh_from_db()
+        self.assertEqual(
+            self.order_item.order.status,
+            "partially_cancelled",
+        )
+
+    def test_processing_and_shipped_items_partially_ship_order(self):
+        second_product = self.create_second_seller_product()
+
+        OrderItem.objects.create(
+            order=self.order_item.order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+            status="processing",
+        )
+
+        self.order_item.status = "processing"
+        self.order_item.save(update_fields=["status"])
+
+        response = self.update_status("shipped")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.order_item.order.refresh_from_db()
+        self.assertEqual(
+            self.order_item.order.status,
+            "partially_shipped",
+        )
+
+    def test_shipped_and_delivered_items_partially_deliver_order(self):
+        second_product = self.create_second_seller_product()
+
+        OrderItem.objects.create(
+            order=self.order_item.order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+            status="shipped",
+        )
+
+        self.order_item.status = "shipped"
+        self.order_item.save(update_fields=["status"])
+
+        response = self.update_status("delivered")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.order_item.order.refresh_from_db()
+        self.assertEqual(
+            self.order_item.order.status,
+            "partially_delivered",
+        )
