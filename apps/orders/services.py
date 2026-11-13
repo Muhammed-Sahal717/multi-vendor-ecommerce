@@ -7,6 +7,35 @@ from apps.cart.models import Cart, CartItem
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
 
+ALLOWED_ORDER_ITEM_TRANSITIONS = {
+    OrderItem.Status.PENDING: [
+        OrderItem.Status.CONFIRMED,
+        OrderItem.Status.CANCELLED,
+    ],
+    OrderItem.Status.CONFIRMED: [
+        OrderItem.Status.PROCESSING,
+        OrderItem.Status.CANCELLED,
+    ],
+    OrderItem.Status.PROCESSING: [
+        OrderItem.Status.SHIPPED,
+        OrderItem.Status.CANCELLED,
+    ],
+    OrderItem.Status.SHIPPED: [
+        OrderItem.Status.DELIVERED,
+    ],
+    OrderItem.Status.DELIVERED: [],
+    OrderItem.Status.CANCELLED: [],
+}
+
+
+def validate_order_item_transition(current_status, new_status):
+    allowed_statuses = ALLOWED_ORDER_ITEM_TRANSITIONS.get(current_status, [])
+
+    if new_status not in allowed_statuses:
+        raise ValidationError(
+            f"Cannot change status from '{current_status}' to '{new_status}'."
+        )
+
 
 @transaction.atomic
 def create_order(*, user, address, payment_method):
@@ -176,39 +205,43 @@ def update_order_status(*, order_id):
 
 @transaction.atomic
 def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
-    # Lock the item and verify seller ownership.
+    # 1. Lock the OrderItem and verify seller ownership.
     try:
-        order_item = (
-            OrderItem.objects.select_for_update()
-            .select_related("order")
-            .get(
-                id=order_item_id,
-                seller__user=seller_user,
-                seller__status="active",
-            )
+        order_item = OrderItem.objects.select_for_update(of=("self",)).get(
+            id=order_item_id,
+            seller__user=seller_user,
+            seller__status="active",
         )
     except OrderItem.DoesNotExist:
         raise NotFound("Order item not found.")
 
-    # Validate the requested transition.
-    from apps.orders.serializers import SellerOrderStatusSerializer
+    # 2. Lock the parent Order explicitly.
+    order = Order.objects.select_for_update().get(id=order_item.order_id)
 
-    serializer = SellerOrderStatusSerializer(
-        order_item,
-        data={"status": new_status},
-        partial=True,
-    )
-    serializer.is_valid(raise_exception=True)
+    # 3. Validate the requested status transition.
+    validate_order_item_transition(order_item.status, new_status)
 
-    # Restore stock only when transitioning to cancelled.
+    # 4. Lock Product and restore stock only for cancellation.
     if new_status == OrderItem.Status.CANCELLED:
         product = Product.objects.select_for_update().get(id=order_item.product_id)
+
         product.stock += order_item.quantity
         product.save(update_fields=["stock", "updated_at"])
 
-    serializer.save()
+    # 5. Update the OrderItem.
+    order_item.status = new_status
+    order_item.save(update_fields=["status", "updated_at"])
 
-    # Recalculate the parent order.
-    update_order_status(order_id=order_item.order_id)
+    # 6. Recalculate the parent Order.
+    new_order_status = calculate_order_status(
+        OrderItem.objects.filter(order=order).values_list(
+            "status",
+            flat=True,
+        )
+    )
+
+    if order.status != new_order_status:
+        order.status = new_order_status
+        order.save(update_fields=["status", "updated_at"])
 
     return order_item

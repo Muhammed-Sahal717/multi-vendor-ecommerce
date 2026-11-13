@@ -323,7 +323,7 @@ class SellerOrderStatusTests(OrderTestBase):
         self.assertEqual(second_product.stock, stock_before)
 
     @patch(
-        "apps.orders.services.update_order_status",
+        "apps.orders.services.calculate_order_status",
         side_effect=Exception("Simulated aggregation failure"),
     )
     def test_cancellation_rolls_back_stock_and_status(self, mock_update):

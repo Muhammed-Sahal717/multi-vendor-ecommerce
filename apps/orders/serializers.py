@@ -1,8 +1,9 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem
 from apps.accounts.models import Address
+from .models import Order, OrderItem
 
+from apps.orders.services import validate_order_item_transition
 
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -142,34 +143,12 @@ class SellerOrderItemSerializer(serializers.ModelSerializer):
 
 
 class SellerOrderStatusSerializer(serializers.ModelSerializer):
-    ALLOWED_TRANSITIONS = {
-        OrderItem.Status.PENDING: [
-            OrderItem.Status.CONFIRMED,
-            OrderItem.Status.CANCELLED,
-        ],
-        OrderItem.Status.CONFIRMED: [
-            OrderItem.Status.PROCESSING,
-            OrderItem.Status.CANCELLED,
-        ],
-        OrderItem.Status.PROCESSING: [
-            OrderItem.Status.SHIPPED,
-            OrderItem.Status.CANCELLED,
-        ],
-        OrderItem.Status.SHIPPED: [
-            OrderItem.Status.DELIVERED,
-        ],
-        OrderItem.Status.DELIVERED: [],
-        OrderItem.Status.CANCELLED: [],
-    }
-
     class Meta:
         model = OrderItem
         fields = ["status"]
 
     def validate_status(self, value):
-        if value not in self.ALLOWED_TRANSITIONS.get(self.instance.status, []):
-            raise serializers.ValidationError(
-                f"Cannot change status from '{self.instance.status}' to '{value}'."
-            )
+
+        validate_order_item_transition(self.instance.status, value)
 
         return value
