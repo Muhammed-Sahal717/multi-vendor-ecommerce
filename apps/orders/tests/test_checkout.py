@@ -4,6 +4,7 @@ from rest_framework import status
 from apps.cart.models import CartItem
 from apps.orders.models import Order
 from apps.orders.tests.base import OrderTestBase
+from apps.payments.models import Payment
 
 
 class CheckoutTests(OrderTestBase):
@@ -32,6 +33,15 @@ class CheckoutTests(OrderTestBase):
         self.assertEqual(self.product.stock, 8)
 
         self.assertFalse(self.cart.items.exists())
+        payment = Payment.objects.get(order=order)
+
+        self.assertEqual(payment.method, Payment.Method.COD)
+        self.assertEqual(payment.provider, Payment.Provider.MANUAL)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(payment.amount, order.total_amount)
+
+        self.assertEqual(response.data["payment"]["method"], "cod")
+        self.assertEqual(response.data["payment"]["status"], "pending")
 
     def test_successful_razorpay_order_creation(self):
         data = {
@@ -51,6 +61,14 @@ class CheckoutTests(OrderTestBase):
 
         self.assertEqual(order.payment_method, "razorpay")
         self.assertEqual(order.total_amount, Decimal("200.00"))
+        payment = Payment.objects.get(order=order)
+
+        self.assertEqual(payment.method, Payment.Method.RAZORPAY)
+        self.assertEqual(payment.provider, Payment.Provider.MOCK)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+
+        self.assertEqual(response.data["payment"]["provider"], "mock")
+        self.assertEqual(response.data["payment"]["status"], "pending")
 
     def test_checkout_with_multiple_sellers(self):
         second_product = self.create_second_seller_product()
