@@ -7,6 +7,8 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
 from apps.sellers.models import SellerProfile
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 
 class AdminProductReviewTests(APITestCase):
@@ -221,3 +223,44 @@ class AdminProductReviewTests(APITestCase):
 
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.PENDING)
+
+    def test_product_approval_creates_audit_event(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "approved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PRODUCT_APPROVED,
+            entity_type=AuditEntity.PRODUCT,
+            entity_id=self.product.id,
+        )
+
+        self.assertEqual(event.actor, self.admin)
+
+    def test_product_rejection_creates_audit_event(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {
+                "status": "rejected",
+                "rejection_reason": "Unclear product images",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PRODUCT_REJECTED,
+            entity_type=AuditEntity.PRODUCT,
+            entity_id=self.product.id,
+        )
+
+        self.assertEqual(event.actor, self.admin)
