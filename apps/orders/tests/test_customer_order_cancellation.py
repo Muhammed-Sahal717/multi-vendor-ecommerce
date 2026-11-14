@@ -3,6 +3,7 @@ from apps.cart.models import CartItem
 from apps.orders.models import Order, OrderItem
 from apps.orders.tests.base import OrderTestBase
 from django.contrib.auth import get_user_model
+from apps.payments.models import Payment, PaymentAttempt
 
 User = get_user_model()
 
@@ -184,3 +185,60 @@ class CustomerOrderCancellationTests(OrderTestBase):
         response = self.cancel_item()
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    def make_online_payment(self):
+        payment = self.order.payment
+        payment.method = Payment.Method.RAZORPAY
+        payment.provider = Payment.Provider.MOCK
+        payment.save(update_fields=["method", "provider"])
+
+        self.order.payment_method = Order.PaymentMethod.RAZORPAY
+        self.order.save(update_fields=["payment_method"])
+
+        return payment
+    def test_partial_cancellation_updates_pending_payment_amount(self):
+        payment = self.make_online_payment()
+        second_product = self.create_second_seller_product()
+
+        OrderItem.objects.create(
+            order=self.order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+        )
+
+        payment.amount = self.order.total_amount + second_product.price
+        payment.save(update_fields=["amount"])
+
+        response = self.cancel_item()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.amount, second_product.price)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+
+
+    def test_full_cancellation_cancels_pending_payment(self):
+        payment = self.make_online_payment()
+
+        response = self.cancel_item()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+
+
+    def test_customer_cannot_cancel_successfully_paid_online_order(self):
+        payment = self.make_online_payment()
+        payment.status = Payment.Status.SUCCESSFUL
+        payment.save(update_fields=["status"])
+
+        response = self.cancel_item()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.order_item.refresh_from_db()
+        self.assertEqual(self.order_item.status, OrderItem.Status.PENDING)

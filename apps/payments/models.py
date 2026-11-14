@@ -24,6 +24,7 @@ class Payment(models.Model):
         SUCCESSFUL = "successful", "Successful"
         FAILED = "failed", "Failed"
         REFUNDED = "refunded", "Refunded"
+        CANCELLED = "cancelled", "Cancelled"
 
     id = models.UUIDField(
         primary_key=True,
@@ -71,6 +72,13 @@ class Payment(models.Model):
             models.CheckConstraint(
                 condition=Q(amount__gte=0),
                 name="payment_amount_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(method="cod", provider="manual")
+                    | Q(method="razorpay", provider__in=["mock", "razorpay"])
+                ),
+                name="payment_method_provider_consistent",
             ),
         ]
 
