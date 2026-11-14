@@ -1,10 +1,7 @@
 from rest_framework.permissions import BasePermission
 
 from apps.accounts.models import User
-from rest_framework.permissions import BasePermission
-
-from apps.accounts.models import User
-from .models import SellerProfile
+from apps.sellers.models import SellerProfile
 
 
 class IsPlatformAdmin(BasePermission):

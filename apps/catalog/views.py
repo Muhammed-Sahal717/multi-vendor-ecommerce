@@ -24,14 +24,12 @@ from apps.audit.constants import AuditAction, AuditEntity
 from apps.audit.services import record_audit_event
 from apps.sellers.models import SellerProfile
 
+from apps.common.permissions import IsActiveSeller, IsPlatformAdmin
+
 from .filters import ProductFilter
 from .models import Category, Product
 from .pagination import ProductPagination
-from .permissions import (
-    IsActiveSeller,
-    IsPlatformAdmin,
-    IsProductOwnerOrAdmin,
-)
+from .permissions import IsProductOwnerOrAdmin
 from .serializers import (
     CategorySerializer,
     ProductReviewSerializer,

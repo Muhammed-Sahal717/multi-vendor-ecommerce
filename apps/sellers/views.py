@@ -13,8 +13,8 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import User
 
+from apps.common.permissions import IsActiveSeller, IsPlatformAdmin
 from .models import SellerApplication, SellerProfile
-from .permissions import IsPlatformAdmin, IsActiveSeller
 from .serializers import (
     AdminSellerApplicationSerializer,
     SellerApplicationReviewSerializer,

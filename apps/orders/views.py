@@ -18,7 +18,7 @@ from apps.orders.services import (
     update_seller_order_item_status,
     cancel_customer_order_item,
 )
-from apps.sellers.permissions import IsActiveSeller
+from apps.common.permissions import IsActiveSeller
 
 
 class CheckoutView(generics.GenericAPIView):

@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from .models import Product, ProductImage
 from .serializers import ProductImageSerializer
-from .permissions import IsActiveSeller
+from apps.common.permissions import IsActiveSeller
 
 
 class SellerProductImageListCreateView(ListCreateAPIView):
