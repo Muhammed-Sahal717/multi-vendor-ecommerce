@@ -6,6 +6,8 @@ from rest_framework import status
 from apps.cart.models import CartItem
 from apps.orders.tests.base import OrderTestBase
 from apps.payments.models import Payment, PaymentAttempt
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 from apps.payments.services import process_mock_payment
 
 User = get_user_model()
@@ -52,6 +54,18 @@ class MockPaymentServiceTests(OrderTestBase):
         self.assertEqual(self.payment.status, Payment.Status.SUCCESSFUL)
         self.assertIsNotNone(self.payment.paid_at)
 
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_SUCCEEDED,
+            entity_id=self.payment.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(event.entity_type, AuditEntity.PAYMENT)
+        self.assertEqual(
+            event.metadata["attempt_id"],
+            str(attempt.id),
+        )
+
     def test_failed_payment_keeps_payment_pending(self):
         attempt = self.process_payment(
             PaymentAttempt.Status.FAILED,
@@ -68,6 +82,22 @@ class MockPaymentServiceTests(OrderTestBase):
         self.assertEqual(self.payment.status, Payment.Status.PENDING)
         self.assertIsNone(self.payment.paid_at)
 
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_FAILED,
+            entity_id=self.payment.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(event.entity_type, AuditEntity.PAYMENT)
+        self.assertEqual(
+            event.metadata["failure_reason"],
+            "Mock payment declined.",
+        )
+        self.assertEqual(
+            event.metadata["attempt_id"],
+            str(attempt.id),
+        )
+
     def test_failed_payment_can_be_retried_successfully(self):
         first_attempt = self.process_payment(
             PaymentAttempt.Status.FAILED,
@@ -83,6 +113,21 @@ class MockPaymentServiceTests(OrderTestBase):
         self.assertEqual(second_attempt.attempt_number, 2)
         self.assertEqual(self.payment.status, Payment.Status.SUCCESSFUL)
         self.assertEqual(self.payment.attempts.count(), 2)
+        self.assertEqual(
+            AuditEvent.objects.filter(
+                entity_id=self.payment.id,
+                action=AuditAction.PAYMENT_FAILED,
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            AuditEvent.objects.filter(
+                entity_id=self.payment.id,
+                action=AuditAction.PAYMENT_SUCCEEDED,
+            ).count(),
+            1,
+        )
 
     def test_another_customer_cannot_process_payment(self):
         another_customer = User.objects.create_user(

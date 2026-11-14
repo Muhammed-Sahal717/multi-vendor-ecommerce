@@ -4,6 +4,8 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.payments.models import Payment, PaymentAttempt
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 
 
 @transaction.atomic
@@ -13,6 +15,8 @@ def process_mock_payment(
     customer_user,
     outcome,
     failure_reason="",
+    ip_address=None,
+    user_agent="",
 ):
     # 1. Lock the payment and verify customer ownership.
     try:
@@ -53,10 +57,38 @@ def process_mock_payment(
         ),
     )
 
-    # 6. Update overall payment only on success.
+    # 6. Update overall payment and record the audit event.
     if outcome == PaymentAttempt.Status.SUCCESSFUL:
         payment.status = Payment.Status.SUCCESSFUL
         payment.paid_at = timezone.now()
         payment.save(update_fields=["status", "paid_at", "updated_at"])
 
+        record_audit_event(
+            actor=customer_user,
+            action=AuditAction.PAYMENT_SUCCEEDED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+            metadata={
+                "order_id": str(payment.order_id),
+                "attempt_id": str(attempt.id),
+                "amount": str(payment.amount),
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    else:
+        record_audit_event(
+            actor=customer_user,
+            action=AuditAction.PAYMENT_FAILED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+            metadata={
+                "order_id": str(payment.order_id),
+                "attempt_id": str(attempt.id),
+                "failure_reason": attempt.failure_reason,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
     return attempt

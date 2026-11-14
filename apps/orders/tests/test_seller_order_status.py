@@ -405,6 +405,12 @@ class SellerOrderStatusTests(OrderTestBase):
         payment.refresh_from_db()
         self.assertEqual(payment.amount, second_product.price)
         self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertFalse(
+            AuditEvent.objects.filter(
+                action=AuditAction.PAYMENT_CANCELLED,
+                entity_id=payment.id,
+            ).exists()
+        )
 
     def test_full_seller_cancellation_cancels_payment(self):
         payment = self.make_online_payment()
@@ -415,6 +421,20 @@ class SellerOrderStatusTests(OrderTestBase):
 
         payment.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.CANCELLED)
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_CANCELLED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+        )
+
+        self.assertEqual(event.actor, self.seller_user)
+        self.assertEqual(
+            event.metadata,
+            {
+                "order_id": str(self.order_item.order.id),
+                "reason": "All order items were cancelled by the seller.",
+            },
+        )
 
     def test_seller_cannot_cancel_successfully_paid_order(self):
         payment = self.make_online_payment()

@@ -317,6 +317,19 @@ def update_seller_order_item_status(
         if remaining_subtotal is None:
             payment.status = Payment.Status.CANCELLED
             payment.save(update_fields=["status", "updated_at"])
+
+            record_audit_event(
+                actor=seller_user,
+                action=AuditAction.PAYMENT_CANCELLED,
+                entity_type=AuditEntity.PAYMENT,
+                entity_id=payment.id,
+                metadata={
+                    "order_id": str(order.id),
+                    "reason": "All order items were cancelled by the seller.",
+                },
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         else:
             payment.amount = remaining_subtotal + order.shipping_fee
             payment.save(update_fields=["amount", "updated_at"])
@@ -423,6 +436,19 @@ def cancel_customer_order_item(
     if remaining_subtotal is None:
         payment.status = Payment.Status.CANCELLED
         payment.save(update_fields=["status", "updated_at"])
+
+        record_audit_event(
+            actor=customer_user,
+            action=AuditAction.PAYMENT_CANCELLED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+            metadata={
+                "order_id": str(order.id),
+                "reason": "All order items were cancelled by the customer.",
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
     else:
         payment.amount = remaining_subtotal + order.shipping_fee
         payment.save(update_fields=["amount", "updated_at"])
