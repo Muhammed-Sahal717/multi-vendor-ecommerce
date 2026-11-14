@@ -21,6 +21,9 @@ from .serializers import (
     SellerProfileSerializer,
 )
 
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
+
 
 class SellerApplicationCreateView(generics.CreateAPIView):
     serializer_class = SellerApplicationSerializer
@@ -110,6 +113,18 @@ class AdminSellerApplicationReviewView(APIView):
                     "reviewed_at",
                     "updated_at",
                 ]
+            )
+            record_audit_event(
+                actor=request.user,
+                action=(
+                    AuditAction.SELLER_APPLICATION_APPROVED
+                    if decision == SellerApplication.Status.APPROVED
+                    else AuditAction.SELLER_APPLICATION_REJECTED
+                ),
+                entity_type=AuditEntity.SELLER_APPLICATION,
+                entity_id=application.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
             )
 
         return Response(

@@ -48,6 +48,8 @@ class MockPaymentProcessView(APIView):
             customer_user=request.user,
             outcome=serializer.validated_data["outcome"],
             failure_reason=serializer.validated_data.get("failure_reason", ""),
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 
         return Response(

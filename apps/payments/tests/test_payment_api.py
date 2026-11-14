@@ -4,6 +4,8 @@ from apps.orders.models import Order
 from apps.orders.tests.base import OrderTestBase
 from apps.payments.models import Payment, PaymentAttempt
 from django.contrib.auth import get_user_model
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 User = get_user_model()
 
@@ -72,6 +74,8 @@ class CustomerPaymentAPITests(OrderTestBase):
             self.mock_url,
             {"outcome": PaymentAttempt.Status.SUCCESSFUL},
             format="json",
+            REMOTE_ADDR="192.168.1.10",
+            HTTP_USER_AGENT="Galla-Test-Client",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -80,6 +84,16 @@ class CustomerPaymentAPITests(OrderTestBase):
         self.payment.refresh_from_db()
         self.assertEqual(self.payment.status, Payment.Status.SUCCESSFUL)
         self.assertIsNotNone(self.payment.paid_at)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_SUCCEEDED,
+            entity_id=self.payment.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(event.entity_type, AuditEntity.PAYMENT)
+        self.assertEqual(event.ip_address, "192.168.1.10")
+        self.assertEqual(event.user_agent, "Galla-Test-Client")
 
     def test_failed_mock_payment_api(self):
         self.make_online_payment()
@@ -91,6 +105,8 @@ class CustomerPaymentAPITests(OrderTestBase):
                 "failure_reason": "Test payment failure",
             },
             format="json",
+            REMOTE_ADDR="192.168.1.20",
+            HTTP_USER_AGENT="Galla-Test-Client",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -102,6 +118,20 @@ class CustomerPaymentAPITests(OrderTestBase):
 
         self.payment.refresh_from_db()
         self.assertEqual(self.payment.status, Payment.Status.PENDING)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_FAILED,
+            entity_id=self.payment.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(event.entity_type, AuditEntity.PAYMENT)
+        self.assertEqual(event.ip_address, "192.168.1.20")
+        self.assertEqual(event.user_agent, "Galla-Test-Client")
+        self.assertEqual(
+            event.metadata["failure_reason"],
+            "Test payment failure",
+        )
 
     def test_invalid_mock_payment_outcome_is_rejected(self):
         self.make_online_payment()

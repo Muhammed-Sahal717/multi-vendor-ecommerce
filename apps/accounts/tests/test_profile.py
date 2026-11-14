@@ -3,6 +3,9 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import User, CustomerProfile
 
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
+
 
 class CustomerProfileAPITests(APITestCase):
     profile_url = "/api/accounts/profile/"
@@ -57,3 +60,20 @@ class CustomerProfileAPITests(APITestCase):
             response.status_code,
             status.HTTP_401_UNAUTHORIZED,
         )
+
+    def test_profile_update_creates_audit_event(self):
+        response = self.client.patch(
+            self.profile_url,
+            {"first_name": "Muhammed"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        audit_event = AuditEvent.objects.get(
+            action=AuditAction.PROFILE_UPDATED,
+            entity_type=AuditEntity.USER,
+            entity_id=self.user.id,
+        )
+
+        self.assertEqual(audit_event.actor, self.user)

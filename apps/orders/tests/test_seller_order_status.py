@@ -4,6 +4,9 @@ from apps.orders.models import OrderItem, Order
 from apps.orders.tests.base import OrderTestBase
 from unittest.mock import patch
 from apps.payments.models import Payment
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
+
 
 class SellerOrderStatusTests(OrderTestBase):
     def setUp(self):
@@ -28,6 +31,7 @@ class SellerOrderStatusTests(OrderTestBase):
             {"status": new_status},
             format="json",
         )
+
     def make_online_payment(self):
         order = self.order_item.order
         payment = order.payment
@@ -40,7 +44,6 @@ class SellerOrderStatusTests(OrderTestBase):
         payment.save(update_fields=["method", "provider"])
 
         return payment
-
 
     def add_second_order_item(self):
         second_product = self.create_second_seller_product()
@@ -187,6 +190,20 @@ class SellerOrderStatusTests(OrderTestBase):
         self.assertEqual(
             self.order_item.order.status,
             "confirmed",
+        )
+        event = AuditEvent.objects.get(
+            action=AuditAction.ORDER_STATUS_CHANGED,
+            entity_type=AuditEntity.ORDER,
+            entity_id=self.order_item.order.id,
+        )
+
+        self.assertEqual(event.actor, self.seller_user)
+        self.assertEqual(
+            event.metadata,
+            {
+                "old_status": "pending",
+                "new_status": "confirmed",
+            },
         )
 
     def test_cancelling_only_item_cancels_parent_order(self):
@@ -376,6 +393,7 @@ class SellerOrderStatusTests(OrderTestBase):
 
         self.assertEqual(self.product.stock, stock_before)
         self.assertEqual(self.order_item.status, "pending")
+
     def test_partial_seller_cancellation_updates_payment_amount(self):
         payment = self.make_online_payment()
         second_product = self.add_second_order_item()
@@ -387,7 +405,12 @@ class SellerOrderStatusTests(OrderTestBase):
         payment.refresh_from_db()
         self.assertEqual(payment.amount, second_product.price)
         self.assertEqual(payment.status, Payment.Status.PENDING)
-
+        self.assertFalse(
+            AuditEvent.objects.filter(
+                action=AuditAction.PAYMENT_CANCELLED,
+                entity_id=payment.id,
+            ).exists()
+        )
 
     def test_full_seller_cancellation_cancels_payment(self):
         payment = self.make_online_payment()
@@ -398,7 +421,20 @@ class SellerOrderStatusTests(OrderTestBase):
 
         payment.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.CANCELLED)
+        event = AuditEvent.objects.get(
+            action=AuditAction.PAYMENT_CANCELLED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+        )
 
+        self.assertEqual(event.actor, self.seller_user)
+        self.assertEqual(
+            event.metadata,
+            {
+                "order_id": str(self.order_item.order.id),
+                "reason": "All order items were cancelled by the seller.",
+            },
+        )
 
     def test_seller_cannot_cancel_successfully_paid_order(self):
         payment = self.make_online_payment()
@@ -420,7 +456,6 @@ class SellerOrderStatusTests(OrderTestBase):
         self.assertEqual(payment.status, Payment.Status.SUCCESSFUL)
         self.assertEqual(self.product.stock, stock_before)
 
-
     def test_seller_cannot_confirm_unpaid_online_order(self):
         self.make_online_payment()
 
@@ -430,7 +465,6 @@ class SellerOrderStatusTests(OrderTestBase):
 
         self.order_item.refresh_from_db()
         self.assertEqual(self.order_item.status, OrderItem.Status.PENDING)
-
 
     def test_seller_cannot_process_unpaid_online_order(self):
         self.make_online_payment()
@@ -444,3 +478,22 @@ class SellerOrderStatusTests(OrderTestBase):
 
         self.order_item.refresh_from_db()
         self.assertEqual(self.order_item.status, OrderItem.Status.CONFIRMED)
+
+
+def test_item_status_change_without_parent_status_change_creates_no_order_audit(self):
+    self.add_second_order_item()
+
+    response = self.update_status("confirmed")
+
+    self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    self.order_item.order.refresh_from_db()
+    self.assertEqual(self.order_item.order.status, "pending")
+
+    self.assertFalse(
+        AuditEvent.objects.filter(
+            action=AuditAction.ORDER_STATUS_CHANGED,
+            entity_type=AuditEntity.ORDER,
+            entity_id=self.order_item.order.id,
+        ).exists()
+    )

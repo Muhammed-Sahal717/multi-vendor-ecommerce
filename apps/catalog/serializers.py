@@ -3,6 +3,8 @@ from .models import Category, Product, ProductImage
 from django.db import transaction
 from apps.sellers.models import SellerProfile
 from PIL import Image, UnidentifiedImageError
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -87,14 +89,26 @@ class ProductSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        user = self.context["request"].user
-
+        request = self.context["request"]
+        user = request.user
         seller = SellerProfile.objects.get(user=user)
 
-        return Product.objects.create(
-            seller=seller,
-            **validated_data,
-        )
+        with transaction.atomic():
+            product = Product.objects.create(
+                seller=seller,
+                **validated_data,
+            )
+
+            record_audit_event(
+                actor=user,
+                action=AuditAction.PRODUCT_CREATED,
+                entity_type=AuditEntity.PRODUCT,
+                entity_id=product.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
+
+        return product
 
     def to_internal_value(self, data):
         protected_fields = {
@@ -131,6 +145,8 @@ class ProductSerializer(serializers.ModelSerializer):
             for field in sensitive_fields
         )
 
+        request = self.context.get("request")
+
         with transaction.atomic():
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
@@ -140,6 +156,15 @@ class ProductSerializer(serializers.ModelSerializer):
                 instance.rejection_reason = ""
 
             instance.save()
+
+            record_audit_event(
+                actor=request.user if request else instance.seller.user,
+                action=AuditAction.PRODUCT_UPDATED,
+                entity_type=AuditEntity.PRODUCT,
+                entity_id=instance.id,
+                ip_address=request.META.get("REMOTE_ADDR") if request else None,
+                user_agent=request.META.get("HTTP_USER_AGENT", "") if request else "",
+            )
 
         return instance
 

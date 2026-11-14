@@ -5,6 +5,8 @@ from apps.cart.models import CartItem
 from apps.orders.models import Order
 from apps.orders.tests.base import OrderTestBase
 from apps.payments.models import Payment
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 
 class CheckoutTests(OrderTestBase):
@@ -301,3 +303,24 @@ class CheckoutTests(OrderTestBase):
         item.refresh_from_db()
         self.assertEqual(item.unit_price, Decimal("100.00"))
         self.assertEqual(item.subtotal, Decimal("200.00"))
+
+
+    def test_successful_checkout_creates_audit_event(self):
+        response = self.client.post(
+            self.checkout_url,
+            self.checkout_data,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        order = Order.objects.get(user=self.customer)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.ORDER_CREATED,
+            entity_type=AuditEntity.ORDER,
+            entity_id=order.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(event.ip_address, "127.0.0.1")

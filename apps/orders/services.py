@@ -8,6 +8,8 @@ from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
 from apps.payments.models import Payment
 from django.db.models import Sum
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 
 ALLOWED_ORDER_ITEM_TRANSITIONS = {
     OrderItem.Status.PENDING: [
@@ -40,7 +42,7 @@ def validate_order_item_transition(current_status, new_status):
 
 
 @transaction.atomic
-def create_order(*, user, address, payment_method):
+def create_order(*, user, address, payment_method, ip_address=None, user_agent=""):
     # Lock the customer's cart.
     try:
         cart = Cart.objects.select_for_update().get(user=user)
@@ -146,6 +148,14 @@ def create_order(*, user, address, payment_method):
         item.order = order
 
     OrderItem.objects.bulk_create(order_items)
+    record_audit_event(
+        actor=user,
+        action=AuditAction.ORDER_CREATED,
+        entity_type=AuditEntity.ORDER,
+        entity_id=order.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
     # Decrement stock while product rows remain locked.
     for cart_item in cart_items:
@@ -216,7 +226,14 @@ def update_order_status(*, order_id):
 
 
 @transaction.atomic
-def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
+def update_seller_order_item_status(
+    *,
+    order_item_id,
+    seller_user,
+    new_status,
+    ip_address=None,
+    user_agent="",
+):
     # 1. Lock the OrderItem and verify seller ownership.
     try:
         order_item = OrderItem.objects.select_for_update(of=("self",)).get(
@@ -271,8 +288,23 @@ def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
     new_order_status = calculate_order_status(item_statuses)
 
     if order.status != new_order_status:
+        old_status = order.status
+
         order.status = new_order_status
         order.save(update_fields=["status", "updated_at"])
+
+        record_audit_event(
+            actor=seller_user,
+            action=AuditAction.ORDER_STATUS_CHANGED,
+            entity_type=AuditEntity.ORDER,
+            entity_id=order.id,
+            metadata={
+                "old_status": old_status,
+                "new_status": new_order_status,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
     # 9. Synchronize Payment after cancellation.
     if new_status == OrderItem.Status.CANCELLED:
@@ -285,6 +317,19 @@ def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
         if remaining_subtotal is None:
             payment.status = Payment.Status.CANCELLED
             payment.save(update_fields=["status", "updated_at"])
+
+            record_audit_event(
+                actor=seller_user,
+                action=AuditAction.PAYMENT_CANCELLED,
+                entity_type=AuditEntity.PAYMENT,
+                entity_id=payment.id,
+                metadata={
+                    "order_id": str(order.id),
+                    "reason": "All order items were cancelled by the seller.",
+                },
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         else:
             payment.amount = remaining_subtotal + order.shipping_fee
             payment.save(update_fields=["amount", "updated_at"])
@@ -293,8 +338,14 @@ def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
 
 
 @transaction.atomic
-def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
-
+def cancel_customer_order_item(
+    *,
+    order_id,
+    order_item_id,
+    customer_user,
+    ip_address=None,
+    user_agent="",
+):
     # 1. Lock the item and verify customer ownership.
     try:
         order_item = OrderItem.objects.select_for_update(of=("self",)).get(
@@ -349,6 +400,20 @@ def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
     order_item.status = OrderItem.Status.CANCELLED
     order_item.save(update_fields=["status", "updated_at"])
 
+    record_audit_event(
+        actor=customer_user,
+        action=AuditAction.ORDER_ITEM_CANCELLED,
+        entity_type=AuditEntity.ORDER_ITEM,
+        entity_id=order_item.id,
+        metadata={
+            "order_id": str(order.id),
+            "product_name": order_item.product_name,
+            "quantity": order_item.quantity,
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
     # 8. Recalculate the parent Order status.
     remaining_items = OrderItem.objects.filter(order=order).exclude(
         status=OrderItem.Status.CANCELLED
@@ -371,6 +436,19 @@ def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
     if remaining_subtotal is None:
         payment.status = Payment.Status.CANCELLED
         payment.save(update_fields=["status", "updated_at"])
+
+        record_audit_event(
+            actor=customer_user,
+            action=AuditAction.PAYMENT_CANCELLED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=payment.id,
+            metadata={
+                "order_id": str(order.id),
+                "reason": "All order items were cancelled by the customer.",
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
     else:
         payment.amount = remaining_subtotal + order.shipping_fee
         payment.save(update_fields=["amount", "updated_at"])
