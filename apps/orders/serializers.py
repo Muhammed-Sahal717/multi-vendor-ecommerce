@@ -4,6 +4,7 @@ from apps.accounts.models import Address
 from .models import Order, OrderItem
 
 from apps.orders.services import validate_order_item_transition
+from apps.payments.serializers import PaymentSummarySerializer
 
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,6 +26,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    payment = PaymentSummarySerializer(read_only=True)
 
     class Meta:
         model = Order
@@ -33,6 +35,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "order_number",
             "status",
             "payment_method",
+            "payment",
             "subtotal",
             "shipping_fee",
             "total_amount",

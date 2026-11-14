@@ -3,7 +3,7 @@ from rest_framework import status
 from apps.orders.models import OrderItem, Order
 from apps.orders.tests.base import OrderTestBase
 from unittest.mock import patch
-
+from apps.payments.models import Payment
 
 class SellerOrderStatusTests(OrderTestBase):
     def setUp(self):
@@ -28,6 +28,44 @@ class SellerOrderStatusTests(OrderTestBase):
             {"status": new_status},
             format="json",
         )
+    def make_online_payment(self):
+        order = self.order_item.order
+        payment = order.payment
+
+        order.payment_method = Order.PaymentMethod.RAZORPAY
+        order.save(update_fields=["payment_method"])
+
+        payment.method = Payment.Method.RAZORPAY
+        payment.provider = Payment.Provider.MOCK
+        payment.save(update_fields=["method", "provider"])
+
+        return payment
+
+
+    def add_second_order_item(self):
+        second_product = self.create_second_seller_product()
+        order = self.order_item.order
+
+        OrderItem.objects.create(
+            order=order,
+            seller=second_product.seller,
+            product=second_product,
+            product_name=second_product.name,
+            product_sku=second_product.sku,
+            quantity=1,
+            unit_price=second_product.price,
+            subtotal=second_product.price,
+        )
+
+        order.subtotal += second_product.price
+        order.total_amount = order.subtotal + order.shipping_fee
+        order.save(update_fields=["subtotal", "total_amount"])
+
+        payment = order.payment
+        payment.amount = order.total_amount
+        payment.save(update_fields=["amount"])
+
+        return second_product
 
     def test_pending_to_confirmed(self):
         response = self.update_status("confirmed")
@@ -338,3 +376,71 @@ class SellerOrderStatusTests(OrderTestBase):
 
         self.assertEqual(self.product.stock, stock_before)
         self.assertEqual(self.order_item.status, "pending")
+    def test_partial_seller_cancellation_updates_payment_amount(self):
+        payment = self.make_online_payment()
+        second_product = self.add_second_order_item()
+
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.amount, second_product.price)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+
+
+    def test_full_seller_cancellation_cancels_payment(self):
+        payment = self.make_online_payment()
+
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+
+
+    def test_seller_cannot_cancel_successfully_paid_order(self):
+        payment = self.make_online_payment()
+        payment.status = Payment.Status.SUCCESSFUL
+        payment.save(update_fields=["status"])
+
+        self.product.refresh_from_db()
+        stock_before = self.product.stock
+
+        response = self.update_status("cancelled")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.order_item.refresh_from_db()
+        payment.refresh_from_db()
+        self.product.refresh_from_db()
+
+        self.assertEqual(self.order_item.status, OrderItem.Status.PENDING)
+        self.assertEqual(payment.status, Payment.Status.SUCCESSFUL)
+        self.assertEqual(self.product.stock, stock_before)
+
+
+    def test_seller_cannot_confirm_unpaid_online_order(self):
+        self.make_online_payment()
+
+        response = self.update_status("confirmed")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.order_item.refresh_from_db()
+        self.assertEqual(self.order_item.status, OrderItem.Status.PENDING)
+
+
+    def test_seller_cannot_process_unpaid_online_order(self):
+        self.make_online_payment()
+
+        self.order_item.status = OrderItem.Status.CONFIRMED
+        self.order_item.save(update_fields=["status"])
+
+        response = self.update_status("processing")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.order_item.refresh_from_db()
+        self.assertEqual(self.order_item.status, OrderItem.Status.CONFIRMED)

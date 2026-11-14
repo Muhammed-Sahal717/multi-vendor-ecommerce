@@ -6,6 +6,8 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.cart.models import Cart, CartItem
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
+from apps.payments.models import Payment
+from django.db.models import Sum
 
 ALLOWED_ORDER_ITEM_TRANSITIONS = {
     OrderItem.Status.PENDING: [
@@ -129,6 +131,16 @@ def create_order(*, user, address, payment_method):
         shipping_postal_code=address.postal_code,
         shipping_country=address.country,
     )
+    Payment.objects.create(
+        order=order,
+        method=payment_method,
+        provider=(
+            Payment.Provider.MANUAL
+            if payment_method == Order.PaymentMethod.COD
+            else Payment.Provider.MOCK
+        ),
+        amount=order.total_amount,
+    )
 
     for item in order_items:
         item.order = order
@@ -215,40 +227,74 @@ def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
     except OrderItem.DoesNotExist:
         raise NotFound("Order item not found.")
 
-    # 2. Lock the parent Order explicitly.
+    # 2. Lock the parent Order.
     order = Order.objects.select_for_update().get(id=order_item.order_id)
 
-    # 3. Validate the requested status transition.
+    # 3. Lock the Payment.
+    payment = Payment.objects.select_for_update().get(order=order)
+
+    # 4. Validate the requested status transition.
     validate_order_item_transition(order_item.status, new_status)
 
-    # 4. Lock Product and restore stock only for cancellation.
-    if new_status == OrderItem.Status.CANCELLED:
-        product = Product.objects.select_for_update().get(id=order_item.product_id)
+    # 5. Prevent fulfillment of unpaid online orders.
+    if (
+        order.payment_method == Order.PaymentMethod.RAZORPAY
+        and payment.status != Payment.Status.SUCCESSFUL
+        and new_status != OrderItem.Status.CANCELLED
+    ):
+        raise ValidationError(
+            {"payment": "Online payment must be completed before order processing."}
+        )
 
+    # 6. Restore stock when cancelling.
+    if new_status == OrderItem.Status.CANCELLED:
+        if payment.status == Payment.Status.SUCCESSFUL:
+            raise ValidationError(
+                {
+                    "payment": "Paid orders cannot be cancelled until refund handling is available."
+                }
+            )
+
+        product = Product.objects.select_for_update().get(id=order_item.product_id)
         product.stock += order_item.quantity
         product.save(update_fields=["stock", "updated_at"])
 
-    # 5. Update the OrderItem.
+    # 7. Update the OrderItem.
     order_item.status = new_status
     order_item.save(update_fields=["status", "updated_at"])
 
-    # 6. Recalculate the parent Order.
-    new_order_status = calculate_order_status(
-        OrderItem.objects.filter(order=order).values_list(
-            "status",
-            flat=True,
-        )
+    # 8. Recalculate the parent Order.
+    item_statuses = OrderItem.objects.filter(order=order).values_list(
+        "status",
+        flat=True,
     )
+    new_order_status = calculate_order_status(item_statuses)
 
     if order.status != new_order_status:
         order.status = new_order_status
         order.save(update_fields=["status", "updated_at"])
+
+    # 9. Synchronize Payment after cancellation.
+    if new_status == OrderItem.Status.CANCELLED:
+        remaining_subtotal = (
+            OrderItem.objects.filter(order=order)
+            .exclude(status=OrderItem.Status.CANCELLED)
+            .aggregate(total=Sum("subtotal"))["total"]
+        )
+
+        if remaining_subtotal is None:
+            payment.status = Payment.Status.CANCELLED
+            payment.save(update_fields=["status", "updated_at"])
+        else:
+            payment.amount = remaining_subtotal + order.shipping_fee
+            payment.save(update_fields=["amount", "updated_at"])
 
     return order_item
 
 
 @transaction.atomic
 def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
+
     # 1. Lock the item and verify customer ownership.
     try:
         order_item = OrderItem.objects.select_for_update(of=("self",)).get(
@@ -268,7 +314,16 @@ def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
     except Order.DoesNotExist:
         raise NotFound("Order not found.")
 
-    # 3. Customers can cancel only pending or confirmed items.
+    # 3. Lock the Payment.
+    payment = Payment.objects.select_for_update().get(order=order)
+
+    # 4. Do not allow cancellation after successful payment.
+    if payment.status == Payment.Status.SUCCESSFUL:
+        raise ValidationError(
+            {"payment": "This order has already been paid and cannot be cancelled."}
+        )
+
+    # 5. Customers can cancel only pending or confirmed items.
     allowed_statuses = [
         OrderItem.Status.PENDING,
         OrderItem.Status.CONFIRMED,
@@ -284,17 +339,21 @@ def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
             }
         )
 
-    # 4. Lock Product and restore stock.
+    # 6. Lock Product and restore stock.
     product = Product.objects.select_for_update().get(id=order_item.product_id)
 
     product.stock += order_item.quantity
     product.save(update_fields=["stock", "updated_at"])
 
-    # 5. Cancel the OrderItem.
+    # 7. Cancel the OrderItem.
     order_item.status = OrderItem.Status.CANCELLED
     order_item.save(update_fields=["status", "updated_at"])
 
-    # 6. Recalculate the parent Order.
+    # 8. Recalculate the parent Order status.
+    remaining_items = OrderItem.objects.filter(order=order).exclude(
+        status=OrderItem.Status.CANCELLED
+    )
+
     new_order_status = calculate_order_status(
         OrderItem.objects.filter(order=order).values_list(
             "status",
@@ -305,5 +364,15 @@ def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
     if order.status != new_order_status:
         order.status = new_order_status
         order.save(update_fields=["status", "updated_at"])
+
+    # 9. Synchronize the Payment amount.
+    remaining_subtotal = remaining_items.aggregate(total=Sum("subtotal"))["total"]
+
+    if remaining_subtotal is None:
+        payment.status = Payment.Status.CANCELLED
+        payment.save(update_fields=["status", "updated_at"])
+    else:
+        payment.amount = remaining_subtotal + order.shipping_fee
+        payment.save(update_fields=["amount", "updated_at"])
 
     return order_item
