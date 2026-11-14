@@ -245,3 +245,65 @@ def update_seller_order_item_status(*, order_item_id, seller_user, new_status):
         order.save(update_fields=["status", "updated_at"])
 
     return order_item
+
+
+@transaction.atomic
+def cancel_customer_order_item(*, order_id, order_item_id, customer_user):
+    # 1. Lock the item and verify customer ownership.
+    try:
+        order_item = OrderItem.objects.select_for_update(of=("self",)).get(
+            id=order_item_id,
+            order_id=order_id,
+            order__user=customer_user,
+        )
+    except OrderItem.DoesNotExist:
+        raise NotFound("Order item not found.")
+
+    # 2. Lock the parent Order.
+    try:
+        order = Order.objects.select_for_update().get(
+            id=order_id,
+            user=customer_user,
+        )
+    except Order.DoesNotExist:
+        raise NotFound("Order not found.")
+
+    # 3. Customers can cancel only pending or confirmed items.
+    allowed_statuses = [
+        OrderItem.Status.PENDING,
+        OrderItem.Status.CONFIRMED,
+    ]
+
+    if order_item.status not in allowed_statuses:
+        raise ValidationError(
+            {
+                "status": (
+                    f"Items with status '{order_item.status}' "
+                    "cannot be cancelled by the customer."
+                )
+            }
+        )
+
+    # 4. Lock Product and restore stock.
+    product = Product.objects.select_for_update().get(id=order_item.product_id)
+
+    product.stock += order_item.quantity
+    product.save(update_fields=["stock", "updated_at"])
+
+    # 5. Cancel the OrderItem.
+    order_item.status = OrderItem.Status.CANCELLED
+    order_item.save(update_fields=["status", "updated_at"])
+
+    # 6. Recalculate the parent Order.
+    new_order_status = calculate_order_status(
+        OrderItem.objects.filter(order=order).values_list(
+            "status",
+            flat=True,
+        )
+    )
+
+    if order.status != new_order_status:
+        order.status = new_order_status
+        order.save(update_fields=["status", "updated_at"])
+
+    return order_item

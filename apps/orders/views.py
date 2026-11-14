@@ -13,7 +13,11 @@ from apps.orders.serializers import (
     SellerOrderItemSerializer,
     SellerOrderStatusSerializer,
 )
-from apps.orders.services import create_order, update_seller_order_item_status
+from apps.orders.services import (
+    create_order,
+    update_seller_order_item_status,
+    cancel_customer_order_item,
+)
 from apps.sellers.permissions import IsActiveSeller
 
 
@@ -100,3 +104,23 @@ class SellerOrderStatusUpdateView(generics.UpdateAPIView):
 
         serializer = self.get_serializer(order_item)
         return Response(serializer.data)
+
+
+class CustomerOrderItemCancelView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated, IsCustomer]
+
+    def post(self, request, order_id, item_id, *args, **kwargs):
+        order_item = cancel_customer_order_item(
+            order_id=order_id,
+            order_item_id=item_id,
+            customer_user=request.user,
+        )
+
+        return Response(
+            {
+                "message": "Order item cancelled successfully.",
+                "item_id": str(order_item.id),
+                "status": order_item.status,
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -7,6 +7,7 @@ from apps.orders.views import (
     SellerOrderDetailView,
     SellerOrderListView,
     SellerOrderStatusUpdateView,
+    CustomerOrderItemCancelView,
 )
 
 urlpatterns = [
@@ -24,4 +25,9 @@ urlpatterns = [
     ),
     path("", OrderListView.as_view(), name="order-list"),
     path("<uuid:pk>/", OrderDetailView.as_view(), name="order-detail"),
+    path(
+        "<uuid:order_id>/items/<uuid:item_id>/cancel/",
+        CustomerOrderItemCancelView.as_view(),
+        name="customer-order-item-cancel",
+    ),
 ]
