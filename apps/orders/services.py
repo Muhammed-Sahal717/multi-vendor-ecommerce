@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.cart.models import Cart, CartItem
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
+from apps.payments.models import Payment
 
 ALLOWED_ORDER_ITEM_TRANSITIONS = {
     OrderItem.Status.PENDING: [
@@ -128,6 +129,16 @@ def create_order(*, user, address, payment_method):
         shipping_state=address.state,
         shipping_postal_code=address.postal_code,
         shipping_country=address.country,
+    )
+    Payment.objects.create(
+        order=order,
+        method=payment_method,
+        provider=(
+            Payment.Provider.MANUAL
+            if payment_method == Order.PaymentMethod.COD
+            else Payment.Provider.MOCK
+        ),
+        amount=order.total_amount,
     )
 
     for item in order_items:
