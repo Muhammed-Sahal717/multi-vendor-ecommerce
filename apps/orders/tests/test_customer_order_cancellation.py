@@ -2,6 +2,9 @@ from rest_framework import status
 from apps.cart.models import CartItem
 from apps.orders.models import Order, OrderItem
 from apps.orders.tests.base import OrderTestBase
+
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 from django.contrib.auth import get_user_model
 from apps.payments.models import Payment, PaymentAttempt
 
@@ -114,8 +117,7 @@ class CustomerOrderCancellationTests(OrderTestBase):
 
         # Try cancelling the first order's item through the second order.
         response = self.client.post(
-            f"/api/orders/{second_order.id}/items/"
-            f"{self.order_item.id}/cancel/"
+            f"/api/orders/{second_order.id}/items/{self.order_item.id}/cancel/"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -185,6 +187,7 @@ class CustomerOrderCancellationTests(OrderTestBase):
         response = self.cancel_item()
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def make_online_payment(self):
         payment = self.order.payment
         payment.method = Payment.Method.RAZORPAY
@@ -195,6 +198,7 @@ class CustomerOrderCancellationTests(OrderTestBase):
         self.order.save(update_fields=["payment_method"])
 
         return payment
+
     def test_partial_cancellation_updates_pending_payment_amount(self):
         payment = self.make_online_payment()
         second_product = self.create_second_seller_product()
@@ -220,7 +224,6 @@ class CustomerOrderCancellationTests(OrderTestBase):
         self.assertEqual(payment.amount, second_product.price)
         self.assertEqual(payment.status, Payment.Status.PENDING)
 
-
     def test_full_cancellation_cancels_pending_payment(self):
         payment = self.make_online_payment()
 
@@ -229,7 +232,6 @@ class CustomerOrderCancellationTests(OrderTestBase):
 
         payment.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.CANCELLED)
-
 
     def test_customer_cannot_cancel_successfully_paid_online_order(self):
         payment = self.make_online_payment()
@@ -242,3 +244,25 @@ class CustomerOrderCancellationTests(OrderTestBase):
 
         self.order_item.refresh_from_db()
         self.assertEqual(self.order_item.status, OrderItem.Status.PENDING)
+
+
+    def test_customer_cancellation_creates_audit_event(self):
+        response = self.cancel_item()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.ORDER_ITEM_CANCELLED,
+            entity_type=AuditEntity.ORDER_ITEM,
+            entity_id=self.order_item.id,
+        )
+
+        self.assertEqual(event.actor, self.customer)
+        self.assertEqual(
+            event.metadata,
+            {
+                "order_id": str(self.order.id),
+                "product_name": self.order_item.product_name,
+                "quantity": self.order_item.quantity,
+            },
+        )

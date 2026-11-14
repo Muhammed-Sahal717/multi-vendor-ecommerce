@@ -33,6 +33,8 @@ class CheckoutView(generics.GenericAPIView):
             user=request.user,
             address=serializer.validated_data["address"],
             payment_method=serializer.validated_data["payment_method"],
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 
         response_serializer = OrderSerializer(order)
@@ -100,6 +102,8 @@ class SellerOrderStatusUpdateView(generics.UpdateAPIView):
             order_item_id=self.kwargs[lookup_url_kwarg],
             seller_user=request.user,
             new_status=request.data.get("status"),
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 
         serializer = self.get_serializer(order_item)
@@ -114,6 +118,8 @@ class CustomerOrderItemCancelView(generics.GenericAPIView):
             order_id=order_id,
             order_item_id=item_id,
             customer_user=request.user,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 
         return Response(
