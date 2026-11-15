@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.payments.models import Payment, PaymentAttempt
+from apps.orders.models import Order, OrderItem
 from apps.audit.constants import AuditAction, AuditEntity
 from apps.audit.services import record_audit_event
 
@@ -92,3 +93,76 @@ def process_mock_payment(
             user_agent=user_agent,
         )
     return attempt
+
+
+@transaction.atomic
+def confirm_cod_payment_collection(
+    *,
+    payment_id,
+    actor,
+    ip_address=None,
+    user_agent="",
+):
+    # Lookup payment without lock to obtain order_id.
+    try:
+        unlocked_payment = Payment.objects.only("id", "order_id").get(id=payment_id)
+    except Payment.DoesNotExist:
+        raise NotFound("Payment not found.")
+
+    # 1. Lock the parent Order FIRST to preserve strict Order -> Payment locking order.
+    try:
+        order = Order.objects.select_for_update().get(id=unlocked_payment.order_id)
+    except Order.DoesNotExist:
+        raise NotFound("Associated order not found.")
+
+    # 2. Lock the Payment SECOND.
+    payment = Payment.objects.select_for_update().get(id=payment_id)
+
+    # 3. Only COD payments can use this workflow.
+    if (
+        payment.method != Payment.Method.COD
+        or payment.provider != Payment.Provider.MANUAL
+        or order.payment_method != Order.PaymentMethod.COD
+    ):
+        raise ValidationError("Only Cash on Delivery (COD) payments can use this collection workflow.")
+
+    # 4. Check payment status to prevent duplicate or invalid collections.
+    if payment.status == Payment.Status.SUCCESSFUL:
+        raise ValidationError("COD payment has already been collected and marked successful.")
+
+    if payment.status != Payment.Status.PENDING:
+        raise ValidationError(f"Cannot confirm collection for payment with status '{payment.status}'.")
+
+    # 5. Verify that the order has reached DELIVERED state.
+    if order.status != Order.Status.DELIVERED:
+        raise ValidationError("Cannot confirm COD payment collection for an order that is not delivered.")
+
+    # 6. Verify that all order items are DELIVERED.
+    items = order.items.all()
+    if not items.exists() or items.exclude(status=OrderItem.Status.DELIVERED).exists():
+        raise ValidationError("Cannot confirm COD payment collection until all order items are delivered.")
+
+    # 7. Update payment status and paid_at atomically, preserving amount.
+    payment.status = Payment.Status.SUCCESSFUL
+    payment.paid_at = timezone.now()
+    payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+    # 8. Record PAYMENT_SUCCEEDED audit event.
+    record_audit_event(
+        actor=actor,
+        action=AuditAction.PAYMENT_SUCCEEDED,
+        entity_type=AuditEntity.PAYMENT,
+        entity_id=payment.id,
+        metadata={
+            "order_id": str(order.id),
+            "order_number": order.order_number,
+            "method": payment.method,
+            "provider": payment.provider,
+            "amount": str(payment.amount),
+            "confirmation_type": "admin_cod_collection",
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    return payment
