@@ -133,14 +133,24 @@ def confirm_cod_payment_collection(
     if payment.status != Payment.Status.PENDING:
         raise ValidationError(f"Cannot confirm collection for payment with status '{payment.status}'.")
 
-    # 5. Verify that the order has reached DELIVERED state.
-    if order.status != Order.Status.DELIVERED:
-        raise ValidationError("Cannot confirm COD payment collection for an order that is not delivered.")
+    # 5. Verify that the order has reached DELIVERED or PARTIALLY_CANCELLED state.
+    if order.status not in (Order.Status.DELIVERED, Order.Status.PARTIALLY_CANCELLED):
+        raise ValidationError(
+            "Cannot confirm COD payment collection for an order that is not delivered or partially cancelled."
+        )
 
-    # 6. Verify that all order items are DELIVERED.
+    # 6. Verify order items: must have items, at least one DELIVERED, and all non-cancelled items DELIVERED.
     items = order.items.all()
-    if not items.exists() or items.exclude(status=OrderItem.Status.DELIVERED).exists():
-        raise ValidationError("Cannot confirm COD payment collection until all order items are delivered.")
+    if not items.exists():
+        raise ValidationError("Cannot confirm COD payment collection for an order without items.")
+
+    if not items.filter(status=OrderItem.Status.DELIVERED).exists():
+        raise ValidationError("Cannot confirm COD payment collection until order items are delivered.")
+
+    if items.exclude(status__in=[OrderItem.Status.DELIVERED, OrderItem.Status.CANCELLED]).exists():
+        raise ValidationError(
+            "Cannot confirm COD payment collection until all order items are delivered."
+        )
 
     # 7. Update payment status and paid_at atomically, preserving amount.
     payment.status = Payment.Status.SUCCESSFUL

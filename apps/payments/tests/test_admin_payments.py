@@ -463,6 +463,158 @@ class AdminPaymentTests(APITestCase):
         response = self.client.post(self.confirm_cod_url_1)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_confirm_cod_for_partially_cancelled_order_with_delivered_items_succeeds(self):
+        self.client.force_authenticate(user=self.admin)
+
+        # Set order to PARTIALLY_CANCELLED with one DELIVERED item and one CANCELLED item
+        self.order1.status = Order.Status.PARTIALLY_CANCELLED
+        self.order1.save(update_fields=["status"])
+
+        self.item1_1.status = OrderItem.Status.DELIVERED
+        self.item1_1.save(update_fields=["status"])
+
+        item1_2 = OrderItem.objects.create(
+            order=self.order1,
+            seller=self.seller,
+            product=self.product,
+            product_name=self.product.name,
+            product_sku=self.product.sku,
+            quantity=1,
+            unit_price=self.product.price,
+            subtotal=Decimal("250.00"),
+            status=OrderItem.Status.CANCELLED,
+        )
+
+        expected_amount = Decimal("500.00")
+        self.assertEqual(self.payment1.amount, expected_amount)
+
+        response = self.client.post(
+            self.confirm_cod_url_1,
+            REMOTE_ADDR="192.168.1.55",
+            HTTP_USER_AGENT="Admin-Portal-Test",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.payment1.refresh_from_db()
+        self.assertEqual(self.payment1.status, Payment.Status.SUCCESSFUL)
+        self.assertIsNotNone(self.payment1.paid_at)
+        # Verify payment amount remains unchanged
+        self.assertEqual(self.payment1.amount, expected_amount)
+
+        # Verify exactly one audit event is created
+        audit_events = AuditEvent.objects.filter(
+            action=AuditAction.PAYMENT_SUCCEEDED,
+            entity_type=AuditEntity.PAYMENT,
+            entity_id=self.payment1.id,
+        )
+        self.assertEqual(audit_events.count(), 1)
+        audit_event = audit_events.first()
+        self.assertEqual(audit_event.actor, self.admin)
+        self.assertEqual(audit_event.metadata["order_id"], str(self.order1.id))
+        self.assertEqual(audit_event.metadata["amount"], str(expected_amount))
+
+    def test_cannot_confirm_cod_when_all_items_cancelled(self):
+        self.client.force_authenticate(user=self.admin)
+
+        self.order1.status = Order.Status.CANCELLED
+        self.order1.save(update_fields=["status"])
+
+        self.item1_1.status = OrderItem.Status.CANCELLED
+        self.item1_1.save(update_fields=["status"])
+
+        response = self.client.post(self.confirm_cod_url_1)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.payment1.refresh_from_db()
+        self.assertEqual(self.payment1.status, Payment.Status.PENDING)
+
+    def test_cannot_confirm_cod_when_one_item_still_processing(self):
+        self.client.force_authenticate(user=self.admin)
+
+        self.order1.status = Order.Status.PARTIALLY_CANCELLED
+        self.order1.save(update_fields=["status"])
+
+        self.item1_1.status = OrderItem.Status.DELIVERED
+        self.item1_1.save(update_fields=["status"])
+
+        OrderItem.objects.create(
+            order=self.order1,
+            seller=self.seller,
+            product=self.product,
+            product_name=self.product.name,
+            product_sku=self.product.sku,
+            quantity=1,
+            unit_price=self.product.price,
+            subtotal=Decimal("250.00"),
+            status=OrderItem.Status.CANCELLED,
+        )
+        OrderItem.objects.create(
+            order=self.order1,
+            seller=self.seller,
+            product=self.product,
+            product_name=self.product.name,
+            product_sku=self.product.sku,
+            quantity=1,
+            unit_price=self.product.price,
+            subtotal=Decimal("250.00"),
+            status=OrderItem.Status.PROCESSING,
+        )
+
+        response = self.client.post(self.confirm_cod_url_1)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("items are delivered", str(response.data))
+
+        self.payment1.refresh_from_db()
+        self.assertEqual(self.payment1.status, Payment.Status.PENDING)
+
+    def test_cannot_confirm_cod_when_one_item_still_shipped(self):
+        self.client.force_authenticate(user=self.admin)
+
+        self.order1.status = Order.Status.PARTIALLY_CANCELLED
+        self.order1.save(update_fields=["status"])
+
+        self.item1_1.status = OrderItem.Status.DELIVERED
+        self.item1_1.save(update_fields=["status"])
+
+        OrderItem.objects.create(
+            order=self.order1,
+            seller=self.seller,
+            product=self.product,
+            product_name=self.product.name,
+            product_sku=self.product.sku,
+            quantity=1,
+            unit_price=self.product.price,
+            subtotal=Decimal("250.00"),
+            status=OrderItem.Status.SHIPPED,
+        )
+
+        response = self.client.post(self.confirm_cod_url_1)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("items are delivered", str(response.data))
+
+        self.payment1.refresh_from_db()
+        self.assertEqual(self.payment1.status, Payment.Status.PENDING)
+
+    def test_cannot_confirm_cod_with_invalid_order_status(self):
+        self.client.force_authenticate(user=self.admin)
+
+        for invalid_status in [
+            Order.Status.PENDING,
+            Order.Status.CONFIRMED,
+            Order.Status.PROCESSING,
+            Order.Status.SHIPPED,
+        ]:
+            with self.subTest(invalid_status=invalid_status):
+                self.order1.status = invalid_status
+                self.order1.save(update_fields=["status"])
+
+                response = self.client.post(self.confirm_cod_url_1)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("not delivered", str(response.data))
+
+                self.payment1.refresh_from_db()
+                self.assertEqual(self.payment1.status, Payment.Status.PENDING)
+
     def test_read_only_restriction_on_admin_payment_endpoints(self):
         self.client.force_authenticate(user=self.admin)
 
