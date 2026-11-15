@@ -1,7 +1,10 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import (
     ListAPIView,
     ListCreateAPIView,
@@ -17,35 +20,35 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 from apps.sellers.models import SellerProfile
 
+from apps.common.permissions import IsActiveSeller, IsPlatformAdmin
+
+from .filters import ProductFilter
 from .models import Category, Product
-from .permissions import (
-    IsActiveSeller,
-    IsPlatformAdmin,
-    IsProductOwnerOrAdmin,
-)
+from .pagination import ProductPagination
+from .permissions import IsProductOwnerOrAdmin
 from .serializers import (
     CategorySerializer,
     ProductReviewSerializer,
     ProductSerializer,
 )
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-
-from .filters import ProductFilter
-from .pagination import ProductPagination
-from rest_framework.exceptions import ValidationError
 
 
 class CategoryListCreateView(ListCreateAPIView):
     serializer_class = CategorySerializer
 
     def get_queryset(self):
-        return Category.objects.filter(
-            parent__isnull=True,
-            is_active=True,
-        ).prefetch_related("subcategories")
+        queryset = Category.objects.filter(parent__isnull=True)
+        include_inactive = (
+            self.request.query_params.get("include_inactive", "").lower() == "true"
+        )
+        if include_inactive and IsPlatformAdmin().has_permission(self.request, self):
+            return queryset.prefetch_related("subcategories")
+
+        return queryset.filter(is_active=True).prefetch_related("subcategories")
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -59,6 +62,8 @@ class CategoryDetailView(RetrieveUpdateDestroyAPIView):
     lookup_field = "slug"
 
     def get_queryset(self):
+        if IsPlatformAdmin().has_permission(self.request, self):
+            return Category.objects.all()
         return Category.objects.filter(is_active=True)
 
     def get_permissions(self):
@@ -66,11 +71,10 @@ class CategoryDetailView(RetrieveUpdateDestroyAPIView):
             return [IsPlatformAdmin()]
 
         return [IsAuthenticatedOrReadOnly()]
+
     def perform_destroy(self, instance):
         if instance.subcategories.filter(is_active=True).exists():
-            raise ValidationError(
-                "Deactivate or remove active subcategories first."
-            )
+            raise ValidationError("Deactivate or remove active subcategories first.")
 
         instance.is_active = False
         instance.save(update_fields=["is_active", "updated_at"])
@@ -229,6 +233,20 @@ class AdminProductReviewView(APIView):
             )
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            decision = serializer.validated_data["status"]
+
+            record_audit_event(
+                actor=request.user,
+                action=(
+                    AuditAction.PRODUCT_APPROVED
+                    if decision == Product.Status.APPROVED
+                    else AuditAction.PRODUCT_REJECTED
+                ),
+                entity_type=AuditEntity.PRODUCT,
+                entity_id=product.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
 
         return Response(
             ProductSerializer(product).data,

@@ -31,7 +31,7 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.common.admin_config.GallaAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -45,6 +45,9 @@ INSTALLED_APPS = [
     "apps.sellers.apps.SellersConfig",
     "apps.catalog.apps.CatalogConfig",
     "apps.cart.apps.CartConfig",
+    "apps.orders.apps.OrdersConfig",
+    "apps.payments.apps.PaymentsConfig",
+    "apps.audit.apps.AuditConfig",
 ]
 
 MIDDLEWARE = [

@@ -3,7 +3,8 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
 from apps.sellers.models import SellerApplication, SellerProfile
-
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 class SellerAdminReviewTests(APITestCase):
     list_url = "/api/sellers/admin/applications/"
@@ -185,3 +186,39 @@ class SellerAdminReviewTests(APITestCase):
             response.status_code,
             status.HTTP_401_UNAUTHORIZED,
         )
+    def test_approval_creates_audit_event(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "approved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.SELLER_APPLICATION_APPROVED,
+            entity_type=AuditEntity.SELLER_APPLICATION,
+            entity_id=self.application.id,
+        )
+
+        self.assertEqual(event.actor, self.admin)
+    def test_rejection_creates_audit_event(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            self.review_url,
+            {"status": "rejected"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.SELLER_APPLICATION_REJECTED,
+            entity_type=AuditEntity.SELLER_APPLICATION,
+            entity_id=self.application.id,
+        )
+
+        self.assertEqual(event.actor, self.admin)

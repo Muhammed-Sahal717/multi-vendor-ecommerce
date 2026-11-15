@@ -2,8 +2,12 @@ from django.urls import path
 from .views import (
     AdminSellerApplicationListView,
     AdminSellerApplicationReviewView,
+    AdminSellerDetailView,
+    AdminSellerListView,
+    AdminSellerStatusUpdateView,
+    SellerApplicationCreateView,
+    SellerProfileView,
 )
-from .views import SellerApplicationCreateView, SellerProfileView
 
 urlpatterns = [
     path(
@@ -20,6 +24,21 @@ urlpatterns = [
         "admin/applications/<uuid:pk>/review/",
         AdminSellerApplicationReviewView.as_view(),
         name="admin-seller-application-review",
+    ),
+    path(
+        "admin/sellers/",
+        AdminSellerListView.as_view(),
+        name="admin-seller-list",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/",
+        AdminSellerDetailView.as_view(),
+        name="admin-seller-detail",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/status/",
+        AdminSellerStatusUpdateView.as_view(),
+        name="admin-seller-status-update",
     ),
     path(
         "profile/",
