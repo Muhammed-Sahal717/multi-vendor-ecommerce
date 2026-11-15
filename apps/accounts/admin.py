@@ -85,9 +85,15 @@ class CustomUserAdmin(UserAdmin):
                     "role",
                     "password1",
                     "password2",
-                    "is_staff",
-                    "is_superuser",
                 ),
             },
         ),
+    )
+    readonly_fields = (
+        "is_staff",
+        "is_superuser",
+        "groups",
+        "user_permissions",
+        "last_login",
+        "date_joined",
     )

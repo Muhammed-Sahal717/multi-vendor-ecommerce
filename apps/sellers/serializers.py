@@ -166,3 +166,56 @@ class SellerProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class AdminSellerProfileSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_first_name = serializers.CharField(
+        source="user.first_name",
+        read_only=True,
+    )
+    user_last_name = serializers.CharField(
+        source="user.last_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = SellerProfile
+        fields = [
+            "id",
+            "user_id",
+            "user_email",
+            "user_first_name",
+            "user_last_name",
+            "business_name",
+            "business_type",
+            "business_email",
+            "business_phone",
+            "business_address",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "website",
+            "description",
+            "status",
+            "approved_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class AdminSellerStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[
+            SellerProfile.Status.ACTIVE,
+            SellerProfile.Status.SUSPENDED,
+        ]
+    )
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Category, Product, ProductImage
 from django.db import transaction
+from apps.common.permissions import IsPlatformAdmin
 from apps.sellers.models import SellerProfile
 from PIL import Image, UnidentifiedImageError
 from apps.audit.constants import AuditAction, AuditEntity
@@ -32,8 +33,46 @@ class CategorySerializer(serializers.ModelSerializer):
         ]
 
     def get_subcategories(self, obj):
-        children = obj.subcategories.filter(is_active=True)
-        return CategorySerializer(children, many=True).data
+        request = self.context.get("request")
+        include_inactive = (
+            request
+            and request.query_params.get("include_inactive", "").lower() == "true"
+            and IsPlatformAdmin().has_permission(request, None)
+        )
+        if include_inactive:
+            children = obj.subcategories.all()
+        else:
+            children = obj.subcategories.filter(is_active=True)
+        return CategorySerializer(children, many=True, context=self.context).data
+
+    def validate(self, attrs):
+        parent = attrs.get("parent") if "parent" in attrs else (self.instance.parent if self.instance else None)
+        is_active = attrs.get("is_active") if "is_active" in attrs else (self.instance.is_active if self.instance else True)
+
+        if is_active and parent and not parent.is_active:
+            raise serializers.ValidationError(
+                {"parent": "Cannot place or activate a category under an inactive parent category."}
+            )
+
+        if self.instance and parent:
+            if parent.id == self.instance.id:
+                raise serializers.ValidationError(
+                    {"parent": "A category cannot be its own parent."}
+                )
+
+            current = parent
+            visited = set()
+            while current is not None:
+                if current.id == self.instance.id:
+                    raise serializers.ValidationError(
+                        {"parent": "Cannot move a category under one of its descendants."}
+                    )
+                if current.id in visited:
+                    break
+                visited.add(current.id)
+                current = current.parent
+
+        return attrs
 
 
 class ProductSerializer(serializers.ModelSerializer):

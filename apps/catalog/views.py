@@ -41,10 +41,14 @@ class CategoryListCreateView(ListCreateAPIView):
     serializer_class = CategorySerializer
 
     def get_queryset(self):
-        return Category.objects.filter(
-            parent__isnull=True,
-            is_active=True,
-        ).prefetch_related("subcategories")
+        queryset = Category.objects.filter(parent__isnull=True)
+        include_inactive = (
+            self.request.query_params.get("include_inactive", "").lower() == "true"
+        )
+        if include_inactive and IsPlatformAdmin().has_permission(self.request, self):
+            return queryset.prefetch_related("subcategories")
+
+        return queryset.filter(is_active=True).prefetch_related("subcategories")
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -58,6 +62,8 @@ class CategoryDetailView(RetrieveUpdateDestroyAPIView):
     lookup_field = "slug"
 
     def get_queryset(self):
+        if IsPlatformAdmin().has_permission(self.request, self):
+            return Category.objects.all()
         return Category.objects.filter(is_active=True)
 
     def get_permissions(self):
