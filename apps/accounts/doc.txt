@@ -1,0 +1,287 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: ACCOUNTS
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `accounts` app provides identity management, authentication, user profiles,
+and customer shipping addresses for the Galla marketplace platform.
+Key responsibilities:
+- Custom user model using email as the unique identifier (`USERNAME_FIELD = "email"`).
+- Role-based authorization across four platform roles: Customer, Seller, Admin, Superadmin.
+- SimpleJWT token issuance and refresh:
+  * Access token lifetime: 30 minutes (`config/settings/base.py`)
+  * Refresh token lifetime: 7 days (`config/settings/base.py`)
+- Customer profile management (mobile phone number and profile avatar image).
+- Multi-address customer shipping address book with a database-level conditional
+  unique constraint ensuring at most one default shipping address per user.
+- Platform administrator management of customer accounts (listing, filtering,
+  inspecting details, and activating/deactivating accounts).
+- Security audit event emissions for user registration, profile updates, and
+  admin customer activation/deactivation.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. User
+   - Table: `accounts_user`
+   - Primary Key: `id` (models.UUIDField, default=uuid.uuid4, editable=False)
+     Note: UUID primary keys provide non-sequential identifiers; access control and
+     object isolation are enforced via query filtering and DRF permissions, not by
+     relying on UUID unpredictability.
+   - Fields:
+     * `password`: CharField(max_length=128) - Django PBKDF2/Argon2 hashed password
+     * `last_login`: DateTimeField(null=True, blank=True)
+     * `is_superuser`: BooleanField(default=False)
+     * `first_name`: CharField(max_length=150, blank=True)
+     * `last_name`: CharField(max_length=150, blank=True)
+     * `is_staff`: BooleanField(default=False)
+     * `is_active`: BooleanField(default=True)
+     * `date_joined`: DateTimeField(default=timezone.now)
+     * `email`: EmailField(unique=True, db_index=True) - Acts as USERNAME_FIELD
+     * `role`: CharField(max_length=20, choices=Role.choices, default=Role.CUSTOMER)
+       Choices:
+         - `customer`: "Customer"
+         - `seller`: "Seller"
+         - `admin`: "Admin"
+         - `superadmin`: "Super Admin"
+   - Managers: Custom `UserManager` (`create_user`, `create_superuser`) enforcing
+     normalized email and role assignment.
+   - Reverse Relationships:
+     * `customer_profile`: OneToOne -> CustomerProfile (`on_delete=models.CASCADE`)
+     * `addresses`: ForeignKey -> Address (`on_delete=models.CASCADE`)
+     * `seller_profile`: OneToOne -> SellerProfile (`on_delete=models.CASCADE`, apps.sellers)
+     * `seller_applications`: ForeignKey -> SellerApplication (`on_delete=models.CASCADE`, apps.sellers)
+     * `reviewed_seller_applications`: ForeignKey -> SellerApplication (`on_delete=models.SET_NULL`, apps.sellers)
+     * `recorded_seller_payouts`: ForeignKey -> SellerPayout (`on_delete=models.PROTECT`, apps.sellers)
+     * `cart`: OneToOne -> Cart (`on_delete=models.CASCADE`, apps.cart)
+     * `orders`: ForeignKey -> Order (`on_delete=models.PROTECT`, apps.orders)
+     * `audit_events`: ForeignKey -> AuditEvent (`on_delete=models.SET_NULL`, apps.audit)
+
+2. CustomerProfile
+   - Table: `accounts_customerprofile`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `user`: OneToOneField(User, on_delete=models.CASCADE, related_name="customer_profile")
+     * `mobile`: CharField(max_length=15, blank=True)
+     * `profile_image`: ImageField(upload_to="customer_profiles/", null=True, blank=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+
+3. Address
+   - Table: `accounts_address`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `user`: ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
+     * `full_name`: CharField(max_length=150)
+     * `mobile`: CharField(max_length=15)
+     * `address_line_1`: CharField(max_length=255)
+     * `address_line_2`: CharField(max_length=255, blank=True)
+     * `city`: CharField(max_length=100)
+     * `state`: CharField(max_length=100)
+     * `postal_code`: CharField(max_length=10)
+     * `country`: CharField(max_length=100, default="India")
+     * `is_default`: BooleanField(default=False)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * `ordering = ["-created_at"]`
+     * `UniqueConstraint(fields=["user"], condition=Q(is_default=True), name="unique_default_address_per_user")`
+
+
+C. API ENDPOINTS
+----------------
+Mounted at both `/api/auth/` and `/api/accounts/` via `config/urls.py`.
+
+1. POST /api/auth/register/ (or /api/accounts/register/)
+   - View: `RegisterView` (generics.CreateAPIView)
+   - Auth: None (AllowAny)
+   - Request Body:
+     * `email` (string, required, valid email format)
+     * `password` (string, required, write-only, minimum 8 characters)
+     * `first_name` (string, optional, max 150)
+     * `last_name` (string, optional, max 150)
+   - Successful Response (201 Created):
+     `{ "id": "<uuid>", "email": "...", "first_name": "...", "last_name": "...", "role": "customer" }`
+   - Error Responses:
+     * 400 Bad Request: Duplicate email (`{"email": ["A user with that email already exists."]}`), password < 8 chars.
+   - Side Effects: Creates `User` with role `customer` and `is_active=True`. Django post_save signal
+     creates an initial empty `CustomerProfile`. Records `USER_REGISTERED` audit event.
+
+2. POST /api/auth/login/ (or /api/accounts/login/)
+   - View: `TokenObtainPairView` (SimpleJWT)
+   - Auth: None (AllowAny)
+   - Request Body:
+     * `email` (string, required)
+     * `password` (string, required)
+   - Successful Response (200 OK):
+     `{ "access": "<jwt_access_token>", "refresh": "<jwt_refresh_token>" }`
+     Token Lifetimes: access=30 minutes, refresh=7 days.
+   - Error Responses:
+     * 401 Unauthorized: Invalid credentials or inactive user account (`is_active=False`).
+
+3. POST /api/auth/token/refresh/ (or /api/accounts/token/refresh/)
+   - View: `TokenRefreshView` (SimpleJWT)
+   - Auth: None (AllowAny)
+   - Request Body: `{ "refresh": "<jwt_refresh_token>" }`
+   - Successful Response (200 OK): `{ "access": "<new_jwt_access_token>" }`
+   - Error Responses:
+     * 401 Unauthorized: Expired, blacklisted, or malformed refresh token.
+
+4. GET /api/auth/me/ (or /api/accounts/me/)
+   - View: `MeView` (APIView)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Successful Response (200 OK):
+     `{ "id": "<uuid>", "email": "...", "first_name": "...", "last_name": "...", "role": "..." }`
+   - Error Responses: 401 Unauthorized if token missing or invalid.
+
+5. GET, PUT, PATCH /api/auth/profile/ (or /api/accounts/profile/)
+   - View: `CustomerProfileView` (generics.RetrieveUpdateAPIView)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Object-level Resolution: `CustomerProfile.objects.get_or_create(user=request.user)`.
+   - Request Body (PUT / PATCH):
+     * `first_name` (string, optional, max 150)
+     * `last_name` (string, optional, max 150)
+     * `mobile` (string, optional, max 15)
+   - Successful Response (200 OK):
+     `{ "id": "<uuid>", "email": "...", "first_name": "...", "last_name": "...", "mobile": "...", "profile_image": null|url }`
+   - Side Effects: On update, records `PROFILE_UPDATED` audit event.
+
+6. PATCH /api/auth/profile/image/ (or /api/accounts/profile/image/)
+   - View: `ProfileImageView` (generics.UpdateAPIView, methods: PATCH, OPTIONS)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Content-Type: multipart/form-data
+   - Request Body: `profile_image` (binary file, image formats validated by Pillow)
+   - Successful Response (200 OK): `{ "id": "<uuid>", "profile_image": "<url>" }`
+   - Error Responses: 400 Bad Request if file is not a valid image.
+
+7. GET, POST /api/auth/addresses/ (or /api/accounts/addresses/)
+   - View: `AddressListCreateView` (generics.ListCreateAPIView)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Query Parameters: None. Always filtered to `user=request.user`.
+   - POST Request Body:
+     * `full_name` (string, required, max 150)
+     * `mobile` (string, required, max 15)
+     * `address_line_1` (string, required, max 255)
+     * `address_line_2` (string, optional, max 255, blank=True)
+     * `city` (string, required, max 100)
+     * `state` (string, required, max 100)
+     * `postal_code` (string, required, max 10)
+     * `country` (string, optional, default "India", max 100)
+     * `is_default` (boolean, optional, default False)
+   - Successful Response:
+     * GET: 200 OK list of addresses owned by the authenticated user.
+     * POST: 201 Created address object.
+   - Business Logic: If `is_default=True`, view wraps creation in `transaction.atomic()`,
+     setting `is_default=False` on all other addresses belonging to `request.user`.
+
+8. GET, PUT, PATCH, DELETE /api/auth/addresses/<uuid:pk>/ (or /api/accounts/addresses/<uuid:pk>/)
+   - View: `AddressDetailView` (generics.RetrieveUpdateDestroyAPIView)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Object-level Scoping: `Address.objects.filter(user=request.user)`
+   - Error Responses: 404 Not Found if address does not exist or belongs to another user.
+   - Successful Response: 200 OK (GET/PUT/PATCH), 204 No Content (DELETE).
+   - Business Logic: If updated to `is_default=True`, existing defaults for this user are unset atomically.
+
+9. GET /api/auth/admin/customers/ (or /api/accounts/admin/customers/)
+   - View: `AdminCustomerListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin: user must have role `admin` or `superadmin`)
+   - Query Parameters:
+     * `search`: string (matches `email`, `first_name`, `last_name`)
+     * `is_active`: boolean string ("true"/"false")
+     * `date_joined_from`: ISO date string (YYYY-MM-DD)
+     * `date_joined_to`: ISO date string (YYYY-MM-DD)
+     * `ordering`: `date_joined`, `-date_joined`, `email`, `-email`
+     * `page`: integer
+     * `page_size`: integer (default 10 via `CustomerPagination`)
+   - Successful Response (200 OK): Paginated list of customer users with `orders_count`.
+   - Error Responses: 403 Forbidden for customer or seller tokens.
+
+10. GET /api/auth/admin/customers/<uuid:pk>/ (or /api/accounts/admin/customers/<uuid:pk>/)
+    - View: `AdminCustomerDetailView` (generics.RetrieveAPIView)
+    - Auth: Bearer JWT (IsPlatformAdmin)
+    - Successful Response (200 OK): Detailed customer profile, shipping addresses, and order history summary.
+    - Error Responses: 404 Not Found if customer does not exist or user has role other than `customer`.
+
+11. PATCH /api/auth/admin/customers/<uuid:pk>/status/ (or /api/accounts/admin/customers/<uuid:pk>/status/)
+    - View: `AdminCustomerStatusUpdateView` (APIView, methods: PATCH)
+    - Auth: Bearer JWT (IsPlatformAdmin)
+    - Request Body: `{ "is_active": <boolean> }` (required)
+    - Successful Response (200 OK): `{ "id": "<uuid>", "email": "...", "is_active": <bool>, "message": "..." }`
+    - Error Responses:
+      * 400 Bad Request: Missing `is_active` field.
+      * 404 Not Found: Customer user not found.
+    - Side Effects: Records `USER_ACTIVATED` or `USER_DEACTIVATED` audit event.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Customer Registration:
+  1. Serializer validates email uniqueness and password complexity.
+  2. Creates user record with `role = Role.CUSTOMER` and `is_active = True`.
+  3. Django signal (`post_save`) initializes empty `CustomerProfile`.
+  4. Records `USER_REGISTERED` audit event.
+- Default Address Maintenance:
+  1. When an address is created or updated with `is_default=True`, an atomic transaction executes:
+     `Address.objects.filter(user=request.user, is_default=True).update(is_default=False)`.
+  2. The target address is saved with `is_default=True`.
+  3. Database-level partial unique constraint `unique_default_address_per_user` guarantees that
+     concurrent requests cannot create multiple default addresses for the same user.
+- Customer Account Deactivation:
+  1. Platform admin sets `is_active=False`.
+  2. SimpleJWT rejects subsequent token refresh or login attempts for deactivated users.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- Public: Registration (`register/`), Login (`login/`), Token Refresh (`token/refresh/`).
+- Authenticated (Any Role): `me/`, `profile/`, `profile/image/`, `addresses/`.
+- Platform Admin (`IsPlatformAdmin`): Required for all `admin/customers/*` endpoints.
+- Object Isolation: Addresses are strictly filtered by `user=request.user`. Users cannot view,
+  edit, or delete another user's addresses.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Duplicate Email: Serializer validation raises HTTP 400 before database insertion.
+- Multiple Default Addresses: Prevented by atomic view updates and database unique constraint.
+- Address Not Found / Cross-Tenant Access: Returns HTTP 404 Not Found.
+- Inactive User Authentication: SimpleJWT rejects login with HTTP 401 Unauthorized.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Emits events via `apps.audit.services.record_audit_event`:
+- `AuditAction.USER_REGISTERED` (entity: `user`, entity_id: user.id)
+- `AuditAction.PROFILE_UPDATED` (entity: `user`, entity_id: user.id)
+- `AuditAction.USER_ACTIVATED` (entity: `user`, entity_id: target_user.id, actor: admin)
+- `AuditAction.USER_DEACTIVATED` (entity: `user`, entity_id: target_user.id, actor: admin)
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- Primary user model referenced by all apps via `settings.AUTH_USER_MODEL`.
+- Foreign key target for `apps.orders.Order` (`on_delete=models.PROTECT`).
+- OneToOne target for `apps.cart.Cart` (`on_delete=models.CASCADE`).
+- OneToOne target for `apps.sellers.SellerProfile` (`on_delete=models.CASCADE`).
+- Uses `apps.audit.services.record_audit_event` and `apps.common.permissions.IsPlatformAdmin`.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/accounts/tests/` (6 test files):
+1. `test_registration.py`: Registration success, duplicate email validation, password length checks.
+2. `test_authentication.py`: JWT login, refresh token, invalid credentials, inactive user rejection.
+3. `test_profile.py`: Profile retrieval, profile update, mobile validation.
+4. `test_profile_image.py`: Multipart image upload, format validation.
+5. `test_addresses.py`: CRUD operations, default address toggling, cross-user isolation.
+6. `test_admin_customers.py`: Admin customer listing, filtering, search, activation/deactivation.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Email verification is deferred (new users are active immediately upon registration).
+- Password reset via email is deferred (console email backend active in development).
+- Profile images are stored on the local filesystem (`MEDIA_ROOT`); cloud storage (S3/GCS)
+  is required for multi-instance production environments.
+================================================================================

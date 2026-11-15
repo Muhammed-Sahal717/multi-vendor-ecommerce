@@ -1,0 +1,213 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: PAYMENTS
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `payments` app provides payment record management, mock online payment simulation,
+payment attempt auditing, and administrative Cash on Delivery (COD) collection workflows
+for the Galla marketplace.
+Key capabilities:
+- 1:1 Payment record tied to each customer `Order`.
+- Payment method support: Cash-on-Delivery (`cod`) and Online/Razorpay (`razorpay`).
+- Provider tracking: `manual` (for COD), `mock` (for simulated online payments), and `razorpay`.
+- Status lifecycle: `pending`, `successful`, `failed`, `refunded`, `cancelled`.
+- Sandbox mock payment gateway endpoint (`POST /api/payments/<id>/mock-process/`)
+  allowing authenticated customers to simulate payment success or failure.
+- Detailed payment attempt ledger (`PaymentAttempt`) tracking each online transaction attempt.
+- Administrative COD cash collection confirmation workflow:
+  * Validates order is delivered or partially cancelled.
+  * Marks payment `SUCCESSFUL` and timestamps `paid_at`.
+  * Note: COD confirmation updates payment state directly and does NOT create a `PaymentAttempt`.
+  * Retroactively triggers seller earning recognition for all delivered order items.
+- Bi-directional integration: successful payment unlocks seller order item fulfillment
+  for online orders, and COD collection releases seller earnings for delivered items.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. Payment
+   - Table: `payments_payment`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `order`: OneToOneField("orders.Order", on_delete=models.PROTECT, related_name="payment")
+     * `method`: CharField(max_length=20, choices=Method.choices)
+       Choices:
+         - `cod`: "Cash on Delivery"
+         - `razorpay`: "Razorpay"
+     * `provider`: CharField(max_length=20, choices=Provider.choices)
+       Choices:
+         - `manual`: "Manual / Cash on Delivery"
+         - `mock`: "Mock Payment"
+         - `razorpay`: "Razorpay"
+     * `amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+       Choices:
+         - `pending`: "Pending"
+         - `successful`: "Successful"
+         - `failed`: "Failed"
+         - `refunded`: "Refunded"
+         - `cancelled`: "Cancelled"
+     * `paid_at`: DateTimeField(null=True, blank=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * `ordering = ["-created_at"]`
+     * `CheckConstraint(condition=Q(amount__gte=0), name="payment_amount_nonnegative")`
+     * `CheckConstraint(condition=(Q(method="cod", provider="manual") | Q(method="razorpay", provider__in=["mock", "razorpay"])), name="payment_method_provider_consistent")`
+   - Reverse Relationships:
+     * `attempts`: ForeignKey -> PaymentAttempt (`on_delete=models.CASCADE`)
+
+2. PaymentAttempt
+   - Table: `payments_paymentattempt`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `payment`: ForeignKey(Payment, on_delete=models.CASCADE, related_name="attempts")
+     * `attempt_number`: PositiveIntegerField()
+     * `transaction_reference`: CharField(max_length=100, unique=True, default=generate_transaction_reference, editable=False)
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+       Choices:
+         - `pending`: "Pending"
+         - `successful`: "Successful"
+         - `failed`: "Failed"
+     * `failure_reason`: TextField(blank=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+   - Constraints & Indexes:
+     * `ordering = ["attempt_number"]`
+     * `UniqueConstraint(fields=["payment", "attempt_number"], name="unique_payment_attempt_number")`
+     * `CheckConstraint(condition=Q(attempt_number__gt=0), name="payment_attempt_number_positive")`
+
+
+C. API ENDPOINTS
+----------------
+All routes mounted at `/api/payments/` via `config/urls.py`.
+
+1. GET /api/payments/
+   - View: `CustomerPaymentListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Scoping: `Payment.objects.filter(order__user=request.user)`.
+   - Successful Response (200 OK): List of payment records belonging to the authenticated customer.
+
+2. GET /api/payments/<uuid:pk>/
+   - View: `CustomerPaymentDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Scoping: `Payment.objects.filter(order__user=request.user)`.
+   - Successful Response (200 OK): Detailed payment record including nested `attempts` list.
+   - Error Responses: 404 Not Found if payment belongs to another user.
+
+3. POST /api/payments/<uuid:pk>/mock-process/
+   - View: `MockPaymentProcessView` (APIView, methods: POST)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Scoping: `Payment.objects.select_for_update().get(id=pk, order__user=request.user)`.
+   - Request Body:
+     * `outcome` (string, required: "successful" or "failed")
+     * `failure_reason` (string, optional, recorded if outcome is "failed")
+   - Successful Response (201 Created): Serialized `PaymentAttempt` representation.
+   - Error Responses:
+     * 400 Bad Request: If payment is not `razorpay`/`mock`, or if already completed (`status != PENDING`).
+     * 404 Not Found: Payment not found.
+   - Business Logic & Side Effects:
+     * Calculates `attempt_number = attempts.count() + 1`.
+     * Creates new `PaymentAttempt` with simulated status.
+     * On success: sets `payment.status = SUCCESSFUL`, sets `payment.paid_at = timezone.now()`.
+       Emits `PAYMENT_SUCCEEDED` audit event.
+     * On failure: sets `payment.status = FAILED`. Emits `PAYMENT_FAILED` audit event.
+
+4. GET /api/payments/admin/
+   - View: `AdminPaymentListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsPlatformAdmin]`).
+   - Query Filters:
+     * `status`: filter by `Payment.Status` (`pending`, `successful`, `failed`, `refunded`, `cancelled`)
+     * `method`: `cod` or `razorpay`
+     * `provider`: `manual`, `mock`, or `razorpay`
+     * `date_from`, `date_to`: ISO date strings (YYYY-MM-DD)
+     * `search`: text query matching `order__order_number`, `order__user__email`, `attempts__transaction_reference`
+     * `ordering`: `created_at`, `-created_at`, `amount`, `status`, `paid_at`
+     * pagination via `PaymentPagination`
+   - Successful Response (200 OK): Paginated list of all platform payments.
+
+5. GET /api/payments/admin/<uuid:pk>/
+   - View: `AdminPaymentDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsPlatformAdmin]`).
+   - Successful Response (200 OK): Detailed administrative view of payment and all attempt traces.
+
+6. POST /api/payments/admin/<uuid:pk>/confirm-cod/
+   - View: `AdminCODPaymentCollectionConfirmView` (APIView, methods: POST)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsPlatformAdmin]`).
+   - Request Body: None required (optional empty JSON).
+   - Successful Response (200 OK): Serialized `AdminPaymentDetailSerializer` representation.
+   - Error Responses:
+     * 400 Bad Request:
+       - Payment is not COD/manual.
+       - Payment is already `SUCCESSFUL` or not `PENDING`.
+       - Parent Order has not reached `DELIVERED` or `PARTIALLY_CANCELLED` state.
+       - Any non-cancelled order item is not yet `DELIVERED`.
+     * 404 Not Found: Payment or associated order not found.
+   - Business Logic & Side Effects:
+     * Acquires lock on `Order` first, then lock on `Payment` to preserve strict locking hierarchy.
+     * Updates `payment.status = SUCCESSFUL` and sets `payment.paid_at = timezone.now()`.
+     * Note: This workflow updates payment status directly; it does NOT create a `PaymentAttempt`.
+     * Calls `record_order_item_earning` for every delivered item in the order, releasing seller earnings.
+     * Emits `PAYMENT_SUCCEEDED` audit event with metadata `confirmation_type: "admin_cod_collection"`.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Initial Payment Creation (`create_initial_payment` in `apps.payments.services`):
+  Invoked during Checkout (`apps.orders.services`). Initializes `Payment` record
+  with `status='pending'` and `amount = order.total_amount`.
+- Online Payment Gate:
+  For orders placed with `razorpay`, seller order items remain blocked from fulfillment
+  until `Payment.status == SUCCESSFUL`. Once mock payment succeeds:
+  * `paid_at` timestamp is fixed.
+  * Sellers can confirm, ship, and deliver their items.
+- Cash on Delivery (COD) Collection Workflow:
+  1. Order is placed with `method='cod'`, `status='pending'`.
+  2. Sellers fulfill and deliver order items.
+  3. Platform admin confirms physical cash collection via `/api/payments/admin/<pk>/confirm-cod/`.
+  4. Payment status is set to `SUCCESSFUL`, and `paid_at` is set.
+  5. Delivered order items retroactively generate `SellerEarning` records with 5% commission retained.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- Customers (`IsCustomer`): View own payments and process mock payments on own pending orders.
+- Platform Admin (`IsPlatformAdmin`): List all payments, inspect details, and confirm COD collections.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Idempotency & Repeat Processing: Attempting to process mock payment on an already completed payment is rejected (HTTP 400).
+- Invalid COD Confirmation: Attempting to confirm COD on an online payment, an already-paid order, or an order where items have not yet been delivered raises HTTP 400 Bad Request.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Emits events via `apps.audit.services.record_audit_event`:
+- `PAYMENT_SUCCEEDED` (entity: `payment`, entity_id: payment.id, actor: customer or admin)
+- `PAYMENT_FAILED` (entity: `payment`, entity_id: payment.id, actor: customer)
+- `PAYMENT_CANCELLED` (entity: `payment`, entity_id: payment.id, actor: customer or admin)
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- OneToOne with `apps.orders.models.Order` (`on_delete=models.PROTECT`).
+- Calls `apps.sellers.services.record_order_item_earning` upon COD confirmation.
+- Uses `apps.audit.services.record_audit_event`.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/payments/tests/` (4 test files):
+1. `test_payment_api.py`: Customer payment list/detail, mock payment processing (success and failure), attempt creation.
+2. `test_payment_service.py`: Service-level validation of payment creation, attempt recording, and status transitions.
+3. `test_admin_payments.py`: Admin payment listing, filters, and COD collection confirmation endpoint.
+4. `test_online_payment_fulfillment.py`: End-to-end integration test verifying real JWT login, checkout, mock payment completion, audit trail verification, and seller fulfillment enablement.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Live Razorpay API (order generation, checkout modal, webhook signature verification) is mocked for MVP; real webhook endpoint is deferred.
+- Multiple payment splits per order (e.g. partial wallet + card) are not supported.
+- Automated payment refunds upon order cancellation are not implemented in MVP.
+================================================================================

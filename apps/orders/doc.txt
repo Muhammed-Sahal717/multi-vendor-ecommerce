@@ -1,0 +1,255 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: ORDERS
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `orders` app orchestrates customer checkout, inventory reservation with row-level
+locking, multi-seller item fulfillment, customer item cancellations, and dynamic parent
+order status aggregation for the Galla marketplace.
+Key capabilities:
+- Atomic checkout creating parent `Order` and discrete seller-specific `OrderItem` records.
+- Concurrency-safe inventory deduction using PostgreSQL row locking (`select_for_update()`).
+- Immutable price (`unit_price`, `subtotal`) and shipping address snapshotting at checkout time.
+- Multi-seller order splitting (sellers inspect and fulfill only their own order items).
+- Dynamic parent order status aggregation computed deterministically from child item statuses.
+- Customer-initiated order item cancellation with automatic inventory restoration.
+- Online payment gate preventing sellers from fulfilling unpaid Razorpay orders.
+- Downstream trigger for seller earning recognition when items reach `DELIVERED`.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. Order
+   - Table: `orders_order`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `order_number`: CharField(max_length=30, unique=True, editable=False) - Format: `GLL-YYYYMMDD-<8-char-hex>`
+     * `user`: ForeignKey(User, on_delete=models.PROTECT, related_name="orders")
+     * `status`: CharField(max_length=25, choices=Status.choices, default=Status.PENDING, db_index=True)
+       Choices:
+         - `pending`: Pending
+         - `confirmed`: Confirmed
+         - `processing`: Processing
+         - `partially_shipped`: Partially Shipped
+         - `shipped`: Shipped
+         - `partially_delivered`: Partially Delivered
+         - `delivered`: Delivered
+         - `partially_cancelled`: Partially Cancelled
+         - `cancelled`: Cancelled
+     * `payment_method`: CharField(max_length=20, choices=PaymentMethod.choices)
+       Choices: `cod` (Cash on Delivery), `razorpay` (Razorpay)
+     * `subtotal`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `shipping_fee`: DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+     * `total_amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * Shipping Address Snapshots:
+       - `shipping_full_name`: CharField(max_length=150)
+       - `shipping_mobile`: CharField(max_length=15)
+       - `shipping_address_line_1`: CharField(max_length=255)
+       - `shipping_address_line_2`: CharField(max_length=255, blank=True)
+       - `shipping_city`: CharField(max_length=100)
+       - `shipping_state`: CharField(max_length=100)
+       - `shipping_postal_code`: CharField(max_length=10)
+       - `shipping_country`: CharField(max_length=100)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * Index: `order_user_created_idx` on `['user', '-created_at']`
+     * CheckConstraints: `subtotal >= 0`, `shipping_fee >= 0`, `total_amount >= 0`.
+   - Reverse Relationships:
+     * `items`: ForeignKey -> OrderItem (`on_delete=models.CASCADE`)
+     * `payment`: OneToOneField -> Payment (`on_delete=models.PROTECT`, apps.payments)
+
+2. OrderItem
+   - Table: `orders_orderitem`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `order`: ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+     * `seller`: ForeignKey("sellers.SellerProfile", on_delete=models.PROTECT, related_name="order_items")
+     * `product`: ForeignKey("catalog.Product", on_delete=models.PROTECT, related_name="order_items")
+     * Snapshots:
+       - `product_name`: CharField(max_length=255)
+       - `product_sku`: CharField(max_length=100)
+     * `quantity`: PositiveIntegerField()
+     * `unit_price`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `subtotal`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+       Choices: `pending`, `confirmed`, `processing`, `shipped`, `delivered`, `cancelled`
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * Index: `orderitem_seller_status_idx` on `['seller', 'status']`
+     * CheckConstraints: `quantity > 0`, `unit_price >= 0`, `subtotal >= 0`.
+   - Reverse Relationships:
+     * `earning`: OneToOneField -> SellerEarning (`on_delete=models.PROTECT`, apps.sellers)
+
+
+C. API ENDPOINTS
+----------------
+All routes mounted at `/api/orders/` via `config/urls.py`.
+
+1. POST /api/orders/checkout/
+   - View: `CheckoutView` (generics.GenericAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Request Body:
+     * `address` (UUID, required) - Valid shipping address ID belonging to the authenticated customer.
+     * `payment_method` (string, required: "cod" or "razorpay").
+   - Successful Response (201 Created): Complete serialized `Order` object including child items and initial payment info.
+   - Error Responses:
+     * 400 Bad Request: Empty cart, invalid address, unavailable products, or insufficient stock.
+     * 403 Forbidden: If authenticated user role is not `customer`.
+   - Business Logic & Side Effects:
+     * Acquires `select_for_update()` lock on all cart products.
+     * Decrements `Product.stock` atomically.
+     * Snapshots address and product data into `Order` and `OrderItem` records.
+     * Empties customer cart items.
+     * Creates initial `Payment` record in `apps.payments`.
+     * Records `ORDER_CREATED` audit event.
+
+2. GET /api/orders/
+   - View: `OrderListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Query Parameters: `ordering` (`-created_at`), pagination via `OrderPagination`.
+   - Successful Response (200 OK): Paginated list of orders placed by the authenticated customer.
+
+3. GET /api/orders/<uuid:pk>/
+   - View: `OrderDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Scoping: `Order.objects.filter(user=request.user)`.
+   - Successful Response (200 OK): Deep order detail with items, fulfillment statuses, and payment.
+   - Error Responses: 404 Not Found if order belongs to another customer.
+
+4. POST /api/orders/<uuid:order_id>/items/<uuid:item_id>/cancel/
+   - View: `CustomerOrderItemCancelView` (generics.GenericAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsCustomer]`).
+   - Request Body: None required (optional empty body).
+   - Successful Response (200 OK):
+     `{ "message": "Order item cancelled successfully.", "item_id": "<uuid>", "status": "cancelled" }`
+   - Business Logic & Side Effects:
+     * Order item must belong to customer's order and be in `pending` or `confirmed` status.
+     * Atomically restores `Product.stock += item.quantity`.
+     * Reaggregates parent order status (e.g. `partially_cancelled` or `cancelled`).
+     * Records `ORDER_ITEM_CANCELLED` audit event.
+   - Error Responses:
+     * 400 Bad Request: If item is in `processing`, `shipped`, `delivered`, or already `cancelled`.
+     * 404 Not Found: If order or item does not exist or belongs to another user.
+
+5. GET /api/orders/seller/
+   - View: `SellerOrderListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsActiveSeller]`).
+   - Query Parameters: `status` (order item status), `ordering`, pagination via `OrderPagination`.
+   - Successful Response (200 OK): Paginated list of `OrderItem` records assigned to the authenticated seller.
+
+6. GET /api/orders/seller/<uuid:pk>/
+   - View: `SellerOrderDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsActiveSeller]`).
+   - Scoping: `OrderItem.objects.filter(seller__user=request.user)`.
+   - Successful Response (200 OK): Detailed order item view with buyer shipping snapshot.
+   - Error Responses: 404 Not Found if item belongs to another seller.
+
+7. PATCH /api/orders/seller/<uuid:pk>/status/
+   - View: `SellerOrderStatusUpdateView` (generics.UpdateAPIView, methods: PATCH, OPTIONS, HEAD)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsActiveSeller]`).
+   - Request Body: `{ "status": "confirmed"|"processing"|"shipped"|"delivered" }` (required)
+   - Validation & Business Rules:
+     * Transitions must follow strict sequential order:
+       `PENDING` -> `CONFIRMED` -> `PROCESSING` -> `SHIPPED` -> `DELIVERED`.
+     * Online Payment Gate: For `razorpay` orders, transitions beyond `PENDING` require the payment
+       to have status `SUCCESSFUL`. If still pending, raises 400 Bad Request:
+       "Cannot fulfill order item. Online payment has not been completed."
+     * When reaching `DELIVERED`, automatically triggers `record_order_item_earning`.
+     * Reaggregates parent `Order` status.
+     * Records `ORDER_STATUS_CHANGED` audit event.
+   - Successful Response (200 OK): Updated serialized `OrderItem`.
+
+8. GET /api/orders/admin/
+   - View: `AdminOrderListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsPlatformAdmin]`).
+   - Query Parameters: `status`, `payment_method`, `date_from`, `date_to`, `search` (order_number, email), pagination.
+   - Successful Response (200 OK): Paginated list of all platform orders.
+
+9. GET /api/orders/admin/<uuid:pk>/
+   - View: `AdminOrderDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsAuthenticated, IsPlatformAdmin]`).
+   - Successful Response (200 OK): Full order tree with all seller items, customer address, and payment attempts.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Checkout Workflow (`create_order` in `apps.orders.services`):
+  1. Opens `transaction.atomic()`.
+  2. Loads customer's cart items with `select_related('product')`.
+  3. Obtains `select_for_update()` lock on all referenced products.
+  4. Validates each product has `stock >= item.quantity` and is active.
+  5. Deducts inventory: `product.stock -= item.quantity` and saves products.
+  6. Generates order number via `generate_order_number()`.
+  7. Copies shipping address snapshot into `Order`.
+  8. Creates `Order` and child `OrderItem` records with unit price snapshot.
+  9. Empties cart items.
+  10. Calls `create_initial_payment` in `apps.payments.services`.
+  11. Emits `ORDER_CREATED` audit event.
+- Status Aggregation Workflow (`aggregate_order_status`):
+  Recomputes master order status from child item statuses:
+  * All items `CANCELLED` -> Order is `CANCELLED`.
+  * Any item `CANCELLED` -> Order is `PARTIALLY_CANCELLED`.
+  * All non-cancelled items `DELIVERED` -> Order is `DELIVERED`.
+  * Any non-cancelled item `DELIVERED` -> Order is `PARTIALLY_DELIVERED`.
+  * All non-cancelled items `SHIPPED` -> Order is `SHIPPED`.
+  * Any non-cancelled item `SHIPPED` -> Order is `PARTIALLY_SHIPPED`.
+  * All non-cancelled items `PROCESSING` -> Order is `PROCESSING`.
+  * All non-cancelled items `CONFIRMED` -> Order is `CONFIRMED`.
+  * Otherwise -> Order is `PENDING`.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- Customers (`IsCustomer`): Place orders, view own orders, cancel own items in `pending`/`confirmed`.
+- Sellers (`IsActiveSeller`): View and advance status only for own items (`seller__user = request.user`).
+  Cannot view or mutate other sellers' items.
+- Platform Admin (`IsPlatformAdmin`): Global view across all platform orders.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Stock Race Condition: Prevented by `select_for_update()` during checkout.
+- Premature Fulfillment of Unpaid Online Orders: Blocked by payment verification gate.
+- Invalid Cancellation: Items in `processing`, `shipped`, or `delivered` cannot be cancelled (HTTP 400).
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Emits events via `apps.audit.services.record_audit_event`:
+- `ORDER_CREATED` (entity: `order`, entity_id: order.id, actor: customer)
+- `ORDER_ITEM_CANCELLED` (entity: `order_item`, entity_id: item.id, actor: customer)
+- `ORDER_STATUS_CHANGED` (entity: `order_item`, entity_id: item.id, actor: seller)
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- ForeignKey to `apps.accounts.models.User` (`on_delete=models.PROTECT`).
+- ForeignKey to `apps.sellers.models.SellerProfile` (`on_delete=models.PROTECT`).
+- ForeignKey to `apps.catalog.models.Product` (`on_delete=models.PROTECT`).
+- OneToOne target for `apps.payments.models.Payment` (`on_delete=models.PROTECT`).
+- Calls `apps.sellers.services.record_order_item_earning` upon delivery.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/orders/tests/` (9 test files):
+1. `test_checkout.py`: Cart checkout, address snapshotting, inventory deduction, atomic rollback.
+2. `test_customer_order_cancellation.py`: Item cancellation rules, inventory restoration, invalid state rejection.
+3. `test_order_history.py`: Customer order history listing, detail view, ownership boundaries.
+4. `test_order_status_aggregation.py`: Comprehensive truth-table testing of parent status aggregation.
+5. `test_order_status_service.py`: Service-level status transition validations.
+6. `test_seller_orders.py`: Seller order listing, cross-seller item isolation.
+7. `test_seller_order_status.py`: Seller fulfillment state machine, online payment gate verification.
+8. `test_admin_orders.py`: Platform admin order listing, filtering, detail inspection.
+9. `test_multi_seller_fulfillment.py`: Real JWT multi-seller end-to-end integration test with independent item fulfillment.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Split shipments from multiple warehouses for a single seller are not supported in MVP.
+- Customer return/refund lifecycle (RMA) is not automated.
+- Logistics provider tracking (3PL API integration) is deferred for future phases.
+================================================================================

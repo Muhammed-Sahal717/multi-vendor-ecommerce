@@ -1,0 +1,128 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: COMMON
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `common` package provides foundational cross-cutting components for the Galla platform:
+- Core role-based access control (RBAC) permission classes (`IsPlatformAdmin`, `IsActiveSeller`).
+- Platform executive analytics engine (`get_admin_dashboard_stats`).
+- Executive dashboard API endpoint (`GET /api/admin/dashboard/`).
+- Custom Django Admin site branding and configuration (`GallaAdminSite` and `GallaAdminConfig`).
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+The `common` app contains no database models of its own. It acts as a shared library
+providing permissions, administrative analytics, and admin site branding.
+
+
+C. API ENDPOINTS
+----------------
+Route mounted at `/api/admin/` via `config/urls.py`.
+
+1. GET /api/admin/dashboard/
+   - View: `AdminDashboardView` (APIView, methods: GET, HEAD, OPTIONS)
+   - Auth: Bearer JWT (`permission_classes = [IsPlatformAdmin]`: user must have role `admin` or `superadmin`).
+   - Query Parameters: None.
+   - Successful Response (200 OK):
+     {
+       "customers": {
+         "total": 50,
+         "active": 48,
+         "inactive": 2
+       },
+       "sellers": {
+         "total": 10,
+         "active": 9,
+         "suspended": 1,
+         "pending_applications": 3
+       },
+       "products": {
+         "total": 120,
+         "approved": 100,
+         "pending_approval": 15,
+         "out_of_stock": 5
+       },
+       "orders": {
+         "total": 45,
+         "pending": 5,
+         "confirmed": 10,
+         "processing": 8,
+         "partially_shipped": 2,
+         "shipped": 5,
+         "partially_delivered": 1,
+         "delivered": 12,
+         "partially_cancelled": 1,
+         "cancelled": 1
+       },
+       "payments": {
+         "successful_count": 30,
+         "successful_amount_total": "154200.00",
+         "pending_cod_count": 15,
+         "pending_cod_amount_total": "45000.00"
+       }
+     }
+   - Error Responses:
+     * 401 Unauthorized: If token is missing or invalid.
+     * 403 Forbidden: If authenticated user role is not `admin` or `superadmin` (e.g. customer or seller).
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Analytics Aggregation (`get_admin_dashboard_stats` in `apps.common.services`):
+  1. Customers: Aggregates `User.objects.filter(role=User.Role.CUSTOMER)` for `total`,
+     `active` (`is_active=True`), and `inactive` (`is_active=False`).
+  2. Sellers: Aggregates `SellerProfile` for `total`, `active`, and `suspended`.
+     Queries `SellerApplication.objects.filter(status=Status.PENDING).count()`.
+  3. Products: Aggregates `Product` for `total`, `approved`, `pending_approval`, and
+     `out_of_stock` (`stock__lte=0`).
+  4. Orders: Aggregates `Order` across all 9 possible status states.
+  5. Payments: Aggregates `Payment` for successful online volume and pending COD collection volume.
+     Uses isolated database aggregations to prevent Cartesian product inflation.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- `IsPlatformAdmin`:
+  Checks that `request.user` is authenticated and `request.user.role in [User.Role.ADMIN, User.Role.SUPERADMIN]`.
+  Used to protect administrative endpoints across `accounts`, `sellers`, `catalog`, `orders`, and `payments`.
+- `IsActiveSeller`:
+  Checks that `request.user` is authenticated, has `role == User.Role.SELLER`, and holds an
+  active `SellerProfile` (`status == 'active'`). Denies access if the profile is suspended or inactive.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Safe Zero Defaults: All database aggregations use `default=Decimal("0.00")` or `Count()`
+  guaranteeing that empty tables produce valid zeroes without raising `NoneType` errors.
+- String Formatting for Currencies: Decimal sums are converted to strings with two decimal places
+  (`f"{value:.2f}"`) to avoid IEEE-754 floating-point inaccuracies during JSON serialization.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Dashboard metrics reads are read-only administrative telemetry queries and do not generate audit events.
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- Imports models from `accounts`, `sellers`, `catalog`, `orders`, and `payments`.
+- Supplies permissions used across the entire backend.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/common/tests/` (2 test files):
+1. `test_admin_site.py`: Custom Django Admin site class attributes and site registrations.
+2. `test_admin_dashboard.py`: Admin dashboard stats computation, permission gating (verifying
+   customers and sellers receive 403 Forbidden), and accurate aggregation with populated data.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Dashboard metrics execute live SQL queries on each request. While suitable for MVP volumes,
+  production scaling under high concurrency will require caching with Redis or asynchronous
+  materialized views.
+- Historical trend queries (e.g. daily/weekly revenue charts) are deferred for post-MVP phases.
+================================================================================
