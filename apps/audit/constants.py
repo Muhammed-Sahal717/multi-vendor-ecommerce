@@ -23,6 +23,9 @@ class AuditAction:
     PAYMENT_FAILED = "PAYMENT_FAILED"
     PAYMENT_CANCELLED = "PAYMENT_CANCELLED"
 
+    SELLER_EARNING_RECORDED = "SELLER_EARNING_RECORDED"
+    SELLER_PAYOUT_RECORDED = "SELLER_PAYOUT_RECORDED"
+
 
 AUDIT_ACTIONS = tuple(
     (value, value)
@@ -39,6 +42,8 @@ class AuditEntity:
     ORDER = "order"
     ORDER_ITEM = "order_item"
     PAYMENT = "payment"
+    SELLER_EARNING = "seller_earning"
+    SELLER_PAYOUT = "seller_payout"
 
 
 AUDIT_ENTITY_TYPES = tuple(

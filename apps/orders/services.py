@@ -280,6 +280,17 @@ def update_seller_order_item_status(
     order_item.status = new_status
     order_item.save(update_fields=["status", "updated_at"])
 
+    # 7a. Recognize seller earnings for delivered item if payment is already successful.
+    if new_status == OrderItem.Status.DELIVERED:
+        from apps.sellers.services import record_order_item_earning
+
+        record_order_item_earning(
+            order_item=order_item,
+            actor=seller_user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
     # 8. Recalculate the parent Order.
     item_statuses = OrderItem.objects.filter(order=order).values_list(
         "status",

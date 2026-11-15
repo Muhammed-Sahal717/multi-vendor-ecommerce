@@ -157,6 +157,17 @@ def confirm_cod_payment_collection(
     payment.paid_at = timezone.now()
     payment.save(update_fields=["status", "paid_at", "updated_at"])
 
+    # 7a. Recognize seller earnings for delivered items now that COD payment is collected.
+    from apps.sellers.services import record_order_item_earning
+
+    for item in items.filter(status=OrderItem.Status.DELIVERED):
+        record_order_item_earning(
+            order_item=item,
+            actor=actor,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
     # 8. Record PAYMENT_SUCCEEDED audit event.
     record_audit_event(
         actor=actor,
