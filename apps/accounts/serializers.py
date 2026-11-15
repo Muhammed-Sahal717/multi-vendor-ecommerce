@@ -187,3 +187,78 @@ class AddressSerializer(serializers.ModelSerializer):
                 ).update(is_default=False)
 
             return super().update(instance, validated_data)
+
+
+class AdminCustomerAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = [
+            "id",
+            "full_name",
+            "mobile",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "is_default",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerListSerializer(serializers.ModelSerializer):
+    mobile = serializers.CharField(
+        source="customer_profile.mobile",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "mobile",
+            "is_active",
+            "date_joined",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerDetailSerializer(serializers.ModelSerializer):
+    mobile = serializers.CharField(
+        source="customer_profile.mobile",
+        read_only=True,
+        default="",
+    )
+    addresses = AdminCustomerAddressSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "mobile",
+            "is_active",
+            "date_joined",
+            "last_login",
+            "addresses",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerStatusUpdateSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField(required=True)
+
+    def validate(self, attrs):
+        if not hasattr(self, "initial_data") or "is_active" not in self.initial_data:
+            raise serializers.ValidationError(
+                {"is_active": "This field is required."}
+            )
+        return attrs
