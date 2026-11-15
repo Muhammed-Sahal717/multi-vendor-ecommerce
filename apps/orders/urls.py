@@ -1,17 +1,21 @@
 from django.urls import path
 
 from apps.orders.views import (
+    AdminOrderDetailView,
+    AdminOrderListView,
     CheckoutView,
+    CustomerOrderItemCancelView,
     OrderDetailView,
     OrderListView,
     SellerOrderDetailView,
     SellerOrderListView,
     SellerOrderStatusUpdateView,
-    CustomerOrderItemCancelView,
 )
 
 urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="order-checkout"),
+    path("admin/", AdminOrderListView.as_view(), name="admin-order-list"),
+    path("admin/<uuid:pk>/", AdminOrderDetailView.as_view(), name="admin-order-detail"),
     path("seller/", SellerOrderListView.as_view(), name="seller-order-list"),
     path(
         "seller/<uuid:pk>/",

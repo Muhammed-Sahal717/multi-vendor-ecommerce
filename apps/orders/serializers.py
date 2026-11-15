@@ -155,3 +155,102 @@ class SellerOrderStatusSerializer(serializers.ModelSerializer):
         validate_order_item_transition(self.instance.status, value)
 
         return value
+
+
+class AdminOrderItemDetailSerializer(serializers.ModelSerializer):
+    seller_id = serializers.UUIDField(source="seller.id", read_only=True)
+    seller_business_name = serializers.CharField(
+        source="seller.business_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "quantity",
+            "unit_price",
+            "subtotal",
+            "status",
+            "seller_id",
+            "seller_business_name",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class AdminOrderListSerializer(serializers.ModelSerializer):
+    customer_email = serializers.EmailField(source="user.email", read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    payment_status = serializers.CharField(
+        source="payment.status",
+        read_only=True,
+        default=None,
+    )
+    item_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "customer_email",
+            "customer_name",
+            "status",
+            "payment_method",
+            "payment_status",
+            "subtotal",
+            "shipping_fee",
+            "total_amount",
+            "item_count",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_customer_name(self, obj):
+        name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return name or obj.user.email
+
+
+class AdminOrderDetailSerializer(serializers.ModelSerializer):
+    customer = serializers.SerializerMethodField()
+    payment = PaymentSummarySerializer(read_only=True)
+    items = AdminOrderItemDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "status",
+            "payment_method",
+            "payment",
+            "customer",
+            "subtotal",
+            "shipping_fee",
+            "total_amount",
+            "shipping_full_name",
+            "shipping_mobile",
+            "shipping_address_line_1",
+            "shipping_address_line_2",
+            "shipping_city",
+            "shipping_state",
+            "shipping_postal_code",
+            "shipping_country",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_customer(self, obj):
+        return {
+            "id": str(obj.user.id),
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+        }
