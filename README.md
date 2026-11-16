@@ -222,11 +222,34 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
    ```bash
    python manage.py migrate
    ```
-5. **Create superuser**:
+5. **Create superuser (or use demo seed)**:
    ```bash
    python manage.py createsuperuser
    ```
-6. **Start development server**:
+6. **Seed Demo Marketplace Data (Recommended for Local Dev & Testing)**:
+   ```bash
+   # Seed realistic interconnected demo data (users, sellers, catalog, Pillow images, orders, payouts)
+   python manage.py seed_demo_data
+
+   # Or cleanly purge only demo data and re-seed
+   python manage.py seed_demo_data --reset
+   ```
+   **Predictable Demo Credentials** (password for all demo accounts: `DemoPass@123`):
+   | Role | Email | Notes |
+   | :--- | :--- | :--- |
+   | **Super Admin** | `superadmin@demo.galla.store` | Full platform administration & audit logs access |
+   | **Platform Admin** | `admin@demo.galla.store` | Application moderation, COD collection, payouts |
+   | **Active Seller 1** | `seller.malabar@demo.galla.store` | Malabar Spice & Craft Co. (Home & Handicrafts) |
+   | **Active Seller 2** | `seller.cochin@demo.galla.store` | Cochin Tech & Gadgets (Electronics & Audio) |
+   | **Active Seller 3** | `seller.kerala@demo.galla.store` | Kerala Weaves & Apparel (Traditional Fashion) |
+   | **Active Seller 4** | `seller.greenvalley@demo.galla.store` | Green Valley Naturals (Ayurvedic & Wellness) |
+   | **Suspended Seller** | `seller.coastal@demo.galla.store` | Coastal Electronics (Suspended merchant state) |
+   | **Pending Applicant**| `applicant.pending@demo.galla.store` | Apex Home Furnishings (Pending review) |
+   | **Rejected Applicant**| `applicant.rejected@demo.galla.store`| Fly-by-Night Imports (Rejected application) |
+   | **Sample Customer** | `customer.rahul.nair@demo.galla.store` | Active customer with default address & order history |
+   | **Sample Customer** | `customer.ananya.menon@demo.galla.store`| Active customer with multi-vendor orders |
+
+7. **Start development server**:
    ```bash
    python manage.py runserver
    ```
@@ -385,7 +408,7 @@ Provides an application-level append-only audit event repository protected by mo
 
 ## 21. Common Module Reference
 Detailed documentation: [apps/common/doc.txt](apps/common/doc.txt)
-Supplies global RBAC permissions (`IsPlatformAdmin`, `IsActiveSeller`), executive dashboard analytics, and custom Django Admin portal styling.
+Supplies global RBAC permissions (`IsPlatformAdmin`, `IsActiveSeller`), executive dashboard analytics, custom Django Admin portal styling, and the modular demo database seeder (`python manage.py seed_demo_data`).
 
 ---
 

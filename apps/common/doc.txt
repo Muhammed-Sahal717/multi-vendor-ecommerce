@@ -9,6 +9,7 @@ The `common` package provides foundational cross-cutting components for the Gall
 - Platform executive analytics engine (`get_admin_dashboard_stats`).
 - Executive dashboard API endpoint (`GET /api/admin/dashboard/`).
 - Custom Django Admin site branding and configuration (`GallaAdminSite` and `GallaAdminConfig`).
+- Reusable marketplace demo data seeding system (`python manage.py seed_demo_data`).
 
 
 B. MODELS & DATA STRUCTURES
@@ -113,13 +114,30 @@ H. RELATIONSHIPS & INTER-APP DEPENDENCIES
 
 I. TEST COVERAGE SUMMARY
 ------------------------
-Directory: `apps/common/tests/` (2 test files):
+Directory: `apps/common/tests/` (3 test files):
 1. `test_admin_site.py`: Custom Django Admin site class attributes and site registrations.
 2. `test_admin_dashboard.py`: Admin dashboard stats computation, permission gating (verifying
    customers and sellers receive 403 Forbidden), and accurate aggregation with populated data.
+3. `test_seed_demo_data.py`: Demo database seeder execution, expected record and image file counts,
+   seeder rerun idempotency, and reset isolation preserving non-demo records.
 
 
-J. KNOWN LIMITATIONS & TECHNICAL DEBT
+J. DEMO DATABASE SEEDING ARCHITECTURE
+-------------------------------------
+Command: `python manage.py seed_demo_data [--reset] [--quiet]`
+Implementation package: `apps/common/seeding/`
+- `constants.py`: Demo domain `@demo.galla.store`, fixed password `DemoPass@123`, Kerala addresses, category tree, product specs, seller profiles.
+- `images.py`: Deterministic Pillow generator (800x800 RGB JPEG) creating 3 distinct image compositions (primary, alternate, detail) per product.
+- `users.py`: Superadmin, admin, 5 sellers, 2 applicants, 20 customers (18 active, 2 inactive), default & secondary addresses.
+- `catalog.py`: 14 hierarchical categories, 36 products (32 approved, 2 pending, 2 rejected, out-of-stock items), 108 image attachments.
+- `carts.py`: Empty and populated customer shopping carts.
+- `orders.py`: 25 orders with 38-55 items across multiple sellers, lifecycle progressions, and cancellations.
+- `payments.py`: Mock online payments and COD collection confirmations.
+- `payouts.py`: Real seller balance checks and `record_seller_payout` execution.
+- `cleaner.py`: Targeted demo data deletion restricted to `@demo.galla.store`, preserving non-demo data and audit triggers.
+
+
+K. KNOWN LIMITATIONS & TECHNICAL DEBT
 -------------------------------------
 - Dashboard metrics execute live SQL queries on each request. While suitable for MVP volumes,
   production scaling under high concurrency will require caching with Redis or asynchronous
