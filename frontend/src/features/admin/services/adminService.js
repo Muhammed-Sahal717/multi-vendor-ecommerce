@@ -53,9 +53,22 @@ export const adminService = {
   },
 
   reviewProduct: async (slug, reviewData) => {
+    const status =
+      reviewData.status ||
+      (reviewData.action === 'approve'
+        ? 'approved'
+        : reviewData.action === 'reject'
+        ? 'rejected'
+        : reviewData.action);
+
+    const payload = {
+      status,
+      rejection_reason: reviewData.rejection_reason || '',
+    };
+
     const response = await apiClient.patch(
       API_ENDPOINTS.CATALOG.ADMIN_PRODUCT_REVIEW(slug),
-      reviewData
+      payload
     );
     return response.data;
   },
@@ -97,9 +110,23 @@ export const adminService = {
   },
 
   reviewSellerApplication: async (id, reviewData) => {
+    const status =
+      reviewData.status ||
+      (reviewData.action === 'approve'
+        ? 'approved'
+        : reviewData.action === 'reject'
+        ? 'rejected'
+        : reviewData.action);
+    const review_notes = reviewData.review_notes ?? reviewData.notes ?? '';
+
+    const payload = {
+      status,
+      review_notes,
+    };
+
     const response = await apiClient.patch(
       API_ENDPOINTS.SELLERS.ADMIN_APPLICATION_REVIEW(id),
-      reviewData
+      payload
     );
     return response.data;
   },
@@ -145,9 +172,14 @@ export const adminService = {
   },
 
   recordSellerPayout: async (sellerId, payoutData) => {
+    const payload = {
+      ...payoutData,
+      payout_date:
+        payoutData.payout_date || new Date().toISOString().split('T')[0],
+    };
     const response = await apiClient.post(
       API_ENDPOINTS.EARNINGS.ADMIN_SELLER_PAYOUTS(sellerId),
-      payoutData
+      payload
     );
     return response.data;
   },

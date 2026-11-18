@@ -68,8 +68,8 @@ export const ProductsPage = () => {
 
   // Mutation for review
   const reviewMutation = useMutation({
-    mutationFn: ({ slug, action, rejection_reason }) =>
-      adminService.reviewProduct(slug, { action, rejection_reason }),
+    mutationFn: ({ slug, status, rejection_reason }) =>
+      adminService.reviewProduct(slug, { status, rejection_reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin'] });
       setReviewModalProduct(null);
@@ -77,9 +77,13 @@ export const ProductsPage = () => {
       setModalError('');
     },
     onError: (err) => {
+      const data = err?.response?.data;
       const msg =
-        err?.response?.data?.detail ||
-        err?.response?.data?.rejection_reason?.[0] ||
+        (typeof data === 'string' && data) ||
+        data?.detail ||
+        (Array.isArray(data?.status) && data.status[0]) ||
+        (Array.isArray(data?.rejection_reason) && data.rejection_reason[0]) ||
+        data?.message ||
         err?.message ||
         'Failed to submit product review';
       setModalError(msg);
@@ -110,9 +114,10 @@ export const ProductsPage = () => {
       setModalError('Please specify the reason for rejecting this product.');
       return;
     }
+    const decisionStatus = reviewAction === 'approve' ? 'approved' : 'rejected';
     reviewMutation.mutate({
       slug: reviewModalProduct.slug,
-      action: reviewAction,
+      status: decisionStatus,
       rejection_reason: rejectionReason.trim(),
     });
   };

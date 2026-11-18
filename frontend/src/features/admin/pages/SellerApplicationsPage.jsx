@@ -68,8 +68,8 @@ export const SellerApplicationsPage = () => {
 
   // Mutation for review
   const reviewMutation = useMutation({
-    mutationFn: ({ id, action, notes }) =>
-      adminService.reviewSellerApplication(id, { action, notes }),
+    mutationFn: ({ id, status, review_notes }) =>
+      adminService.reviewSellerApplication(id, { status, review_notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin'] });
       setReviewModalApp(null);
@@ -77,9 +77,13 @@ export const SellerApplicationsPage = () => {
       setReviewError('');
     },
     onError: (err) => {
+      const data = err?.response?.data;
       const msg =
-        err?.response?.data?.detail ||
-        err?.response?.data?.message ||
+        (typeof data === 'string' && data) ||
+        data?.detail ||
+        (Array.isArray(data?.status) && data.status[0]) ||
+        (Array.isArray(data?.review_notes) && data.review_notes[0]) ||
+        data?.message ||
         err?.message ||
         'Failed to review application';
       setReviewError(msg);
@@ -111,10 +115,11 @@ export const SellerApplicationsPage = () => {
       setReviewError('Please provide a reason or notes for rejecting this application.');
       return;
     }
+    const decisionStatus = reviewAction === 'approve' ? 'approved' : 'rejected';
     reviewMutation.mutate({
       id: reviewModalApp.id,
-      action: reviewAction,
-      notes: reviewNotes.trim(),
+      status: decisionStatus,
+      review_notes: reviewNotes.trim(),
     });
   };
 
