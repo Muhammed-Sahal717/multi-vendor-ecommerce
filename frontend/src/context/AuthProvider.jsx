@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import apiClient from '../lib/axios.js';
 import { API_ENDPOINTS } from '../lib/constants.js';
 import { useAuthStore } from '../stores/authStore.js';
+import { queryClient } from '../lib/queryClient.js';
 
 export const AuthContext = createContext(null);
 
@@ -54,6 +55,11 @@ export const AuthProvider = ({ children }) => {
     };
   }, [setUser]);
 
+  const handleLogout = useCallback(() => {
+    logout();
+    queryClient.clear();
+  }, [logout]);
+
   const value = {
     user,
     role,
@@ -61,7 +67,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     isInitializing,
     refetchUser: fetchCurrentUser,
-    logout,
+    logout: handleLogout,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
