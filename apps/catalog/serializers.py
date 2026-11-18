@@ -84,6 +84,8 @@ class ProductSerializer(serializers.ModelSerializer):
         source="category.name",
         read_only=True,
     )
+    primary_image = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -102,6 +104,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "status",
             "rejection_reason",
             "is_active",
+            "primary_image",
+            "images",
             "created_at",
             "updated_at",
         ]
@@ -113,8 +117,31 @@ class ProductSerializer(serializers.ModelSerializer):
             "slug",
             "status",
             "rejection_reason",
+            "primary_image",
+            "images",
             "created_at",
             "updated_at",
+        ]
+
+    def get_primary_image(self, obj):
+        primary = obj.images.filter(is_primary=True).first() or obj.images.first()
+        if primary and primary.image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
+        return None
+
+    def get_images(self, obj):
+        request = self.context.get("request")
+        return [
+            {
+                "id": str(img.id),
+                "image": request.build_absolute_uri(img.image.url) if request else img.image.url,
+                "is_primary": img.is_primary,
+                "display_order": img.display_order,
+            }
+            for img in obj.images.all()
         ]
 
     def validate_category(self, category):
