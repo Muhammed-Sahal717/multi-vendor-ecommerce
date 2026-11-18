@@ -55,7 +55,7 @@ export const ProductCard = ({ product }) => {
   const displayRating = rating || average_rating;
 
   const addToCartMutation = useMutation({
-    mutationFn: () => cartService.addItem({ product_id: id, quantity: 1 }),
+    mutationFn: () => cartService.addItem({ product: id, quantity: 1 }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
       setIsAdded(true);

@@ -8,13 +8,17 @@ export const cartService = {
   },
 
   addItem: async (itemData) => {
-    const response = await apiClient.post(API_ENDPOINTS.CART.ITEMS, itemData);
+    const payload = {
+      product: itemData.product || itemData.productId || itemData.product_id,
+      quantity: Number(itemData.quantity) || 1,
+    };
+    const response = await apiClient.post(API_ENDPOINTS.CART.ITEMS, payload);
     return response.data;
   },
 
   updateItemQuantity: async (itemId, quantity) => {
     const response = await apiClient.patch(API_ENDPOINTS.CART.ITEM_DETAIL(itemId), {
-      quantity,
+      quantity: Number(quantity),
     });
     return response.data;
   },

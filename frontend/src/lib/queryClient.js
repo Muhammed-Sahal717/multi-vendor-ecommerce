@@ -27,6 +27,7 @@ export const queryKeys = {
     categories: () => ["catalog", "categories"],
     category: (slug) => ["catalog", "categories", slug],
     products: (filters = {}) => ["catalog", "products", filters],
+    productsList: (filters = {}) => ["catalog", "products", filters],
     product: (slug) => ["catalog", "products", slug],
   },
   cart: {

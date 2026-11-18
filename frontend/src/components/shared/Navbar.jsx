@@ -34,18 +34,18 @@ export const Navbar = () => {
   const navigate = useNavigate();
   const { user, role, isAuthenticated, logout } = useAuth();
 
-  // Fetch cart data when authenticated to show item badge
+  // Fetch cart data when authenticated as customer to show item badge
   const { data: cartData } = useQuery({
     queryKey: queryKeys.cart.all,
     queryFn: cartService.getCart,
-    enabled: isAuthenticated,
-    staleTime: 1000 * 60 * 2,
+    enabled: isAuthenticated && role === ROLES.CUSTOMER,
+    staleTime: 1000 * 30,
   });
 
   const cartItemCount =
-    cartData?.items?.reduce((total, item) => total + (item.quantity || 1), 0) ||
-    cartData?.total_items ||
-    (Array.isArray(cartData) ? cartData.length : 0);
+    cartData?.total_items ??
+    cartData?.items?.reduce((total, item) => total + (item.quantity || 1), 0) ??
+    0;
 
   const isSeller = role === ROLES.SELLER;
   const isAdmin = role === ROLES.ADMIN || role === ROLES.SUPERADMIN;
