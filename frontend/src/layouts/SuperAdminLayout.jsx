@@ -1,9 +1,7 @@
-import { Outlet } from "react-router-dom";
+import AdminLayout from './AdminLayout.jsx';
 
-export default function SuperAdminLayout() {
-  return (
-    <div className="SuperAdminLayout">
-      <Outlet />
-    </div>
-  );
-}
+export const SuperAdminLayout = () => {
+  return <AdminLayout />;
+};
+
+export default SuperAdminLayout;

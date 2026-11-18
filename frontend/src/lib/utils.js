@@ -65,3 +65,18 @@ export const getProductImageUrl = (product) => {
 
   return getMediaUrl(rawUrl);
 };
+
+/**
+ * Pure date formatting helper that avoids calling Date.now() during render.
+ */
+export const formatDate = (dateStr, options = { month: 'short', day: 'numeric', year: 'numeric' }) => {
+  if (!dateStr) return 'Recent';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Recent';
+    return d.toLocaleDateString('en-US', options);
+  } catch {
+    return 'Recent';
+  }
+};
+
