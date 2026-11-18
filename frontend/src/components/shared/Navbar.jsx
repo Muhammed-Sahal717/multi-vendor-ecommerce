@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart,
   User,
@@ -9,12 +9,12 @@ import {
   LayoutDashboard,
   Shield,
   ChevronDown,
-} from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { Logo } from "./Logo.jsx";
-import { SearchInput } from "./SearchInput.jsx";
-import { Button } from "../ui/button.jsx";
-import { Badge } from "../ui/badge.jsx";
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Logo } from './Logo.jsx';
+import { SearchInput } from './SearchInput.jsx';
+import { Button } from '../ui/button.jsx';
+import { Badge } from '../ui/badge.jsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,12 +23,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu.jsx";
-import { useAuth } from "../../context/AuthProvider.jsx";
-import { ROUTE_PATHS } from "../../routes/routePaths.js";
-import { ROLES } from "../../lib/constants.js";
-import { cartService } from "../../features/cart/services/cartService.js";
-import { queryKeys } from "../../lib/queryClient.js";
+} from '../ui/dropdown-menu.jsx';
+import { useAuth } from '../../context/AuthProvider.jsx';
+import { ROUTE_PATHS } from '../../routes/routePaths.js';
+import { ROLES } from '../../lib/constants.js';
+import { cartService } from '../../features/cart/services/cartService.js';
+import { queryKeys } from '../../lib/queryClient.js';
 
 export const Navbar = () => {
   const navigate = useNavigate();
@@ -58,29 +58,26 @@ export const Navbar = () => {
   return (
     <>
       {/* Top Notification / Promo Bar */}
-      <div className="bg-neutral-900 px-4 py-2 text-center text-xs font-medium text-neutral-300">
-        <span>
-          ⚡ Free delivery on orders over ₹999 & Cash On Delivery available
-          across India
-        </span>
+      <div className="bg-primary px-4 py-1.5 text-center text-xs font-semibold text-primary-foreground shadow-xs">
+        <span>⚡ Free delivery on orders over ₹999 & Cash On Delivery available across India</span>
       </div>
 
       {/* Main Header / Navigation */}
-      <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           {/* Logo & Navigation */}
           <div className="flex items-center gap-8">
             <Logo />
-            <nav className="hidden items-center gap-6 text-sm font-medium text-neutral-600 md:flex">
+            <nav className="hidden items-center gap-6 text-sm font-semibold text-muted-foreground md:flex">
               <Link
                 to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
-                className="transition-colors hover:text-neutral-900"
+                className="transition-colors hover:text-foreground"
               >
                 Products
               </Link>
               <Link
                 to={ROUTE_PATHS.STOREFRONT.CATEGORIES}
-                className="transition-colors hover:text-neutral-900"
+                className="transition-colors hover:text-foreground"
               >
                 Categories
               </Link>
@@ -95,16 +92,13 @@ export const Navbar = () => {
           {/* Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Shopping Cart Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="relative h-9 px-3"
-            >
+            <Button asChild variant="outline" size="sm" className="relative h-9 px-3 border-border hover:border-primary/40">
               <Link to={ROUTE_PATHS.STOREFRONT.CART} aria-label="Shopping Cart">
-                <ShoppingCart size={18} />
+                <ShoppingCart size={17} className="text-foreground" />
                 {cartItemCount > 0 && (
-                  <Badge className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-neutral-950">
+                  <Badge
+                    className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs"
+                  >
                     {cartItemCount}
                   </Badge>
                 )}
@@ -116,31 +110,21 @@ export const Navbar = () => {
               <div className="flex items-center gap-2">
                 {/* Account Menu */}
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-800 shadow-2xs hover:bg-neutral-50 focus:outline-none">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-bold text-white">
-                      {user?.first_name ? (
-                        user.first_name[0].toUpperCase()
-                      ) : (
-                        <User size={13} />
-                      )}
+                  <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/40 focus:outline-none transition-all">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                      {user?.first_name ? user.first_name[0].toUpperCase() : <User size={13} />}
                     </div>
                     <span className="hidden max-w-28 truncate sm:inline-block">
-                      {user?.first_name
-                        ? `${user.first_name}`
-                        : user?.email?.split("@")[0] || "Account"}
+                      {user?.first_name ? `${user.first_name}` : user?.email?.split('@')[0] || 'Account'}
                     </span>
-                    <ChevronDown size={14} className="text-neutral-400" />
+                    <ChevronDown size={14} className="text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-semibold leading-none">
-                            {user?.first_name || "My Account"}
-                          </p>
-                          <p className="text-xs leading-none text-neutral-500">
-                            {user?.email}
-                          </p>
+                          <p className="text-sm font-semibold leading-none text-foreground">{user?.first_name || 'My Account'}</p>
+                          <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                         </div>
                       </DropdownMenuLabel>
                     </DropdownMenuGroup>
@@ -174,10 +158,8 @@ export const Navbar = () => {
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                           <DropdownMenuItem
-                            onClick={() =>
-                              navigate(ROUTE_PATHS.SELLER.DASHBOARD)
-                            }
-                            className="cursor-pointer gap-2 font-medium text-amber-600"
+                            onClick={() => navigate(ROUTE_PATHS.SELLER.DASHBOARD)}
+                            className="cursor-pointer gap-2 font-semibold text-chart-5"
                           >
                             <Store size={15} /> Seller Portal
                           </DropdownMenuItem>
@@ -190,10 +172,8 @@ export const Navbar = () => {
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                           <DropdownMenuItem
-                            onClick={() =>
-                              navigate(ROUTE_PATHS.ADMIN.DASHBOARD)
-                            }
-                            className="cursor-pointer gap-2 font-medium text-red-600"
+                            onClick={() => navigate(ROUTE_PATHS.ADMIN.DASHBOARD)}
+                            className="cursor-pointer gap-2 font-semibold text-chart-3"
                           >
                             <Shield size={15} /> Admin Portal
                           </DropdownMenuItem>
@@ -205,7 +185,7 @@ export const Navbar = () => {
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         onClick={handleLogout}
-                        className="cursor-pointer gap-2 font-medium text-red-600 focus:text-red-600"
+                        className="cursor-pointer gap-2 font-semibold text-destructive focus:text-destructive focus:bg-destructive/10"
                       >
                         <LogOut size={15} /> Log Out
                       </DropdownMenuItem>
@@ -218,23 +198,19 @@ export const Navbar = () => {
                   variant="ghost"
                   size="sm"
                   onClick={handleLogout}
-                  className="h-9 gap-1.5 px-2.5 text-xs font-semibold text-neutral-600 hover:bg-red-50 hover:text-red-600"
+                  className="h-9 gap-1.5 px-2.5 text-xs font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   title="Sign out of your account"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={15} />
                   <span className="hidden md:inline">Log Out</span>
                 </Button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="sm" className="font-semibold text-muted-foreground hover:text-foreground">
                   <Link to={ROUTE_PATHS.AUTH.LOGIN}>Sign In</Link>
                 </Button>
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-neutral-900 text-white hover:bg-neutral-800"
-                >
+                <Button asChild size="sm" className="bg-primary text-primary-foreground font-semibold hover:bg-primary/90 shadow-xs">
                   <Link to={ROUTE_PATHS.AUTH.REGISTER}>Register</Link>
                 </Button>
               </div>
@@ -243,7 +219,7 @@ export const Navbar = () => {
         </div>
 
         {/* Mobile Search input bar */}
-        <div className="border-t border-neutral-100 p-2.5 md:hidden">
+        <div className="border-t border-border p-2.5 md:hidden bg-card">
           <SearchInput />
         </div>
       </header>

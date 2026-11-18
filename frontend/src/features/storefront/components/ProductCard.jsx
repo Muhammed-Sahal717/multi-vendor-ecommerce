@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 import { Badge } from '../../../components/ui/badge.jsx';
 import { Button } from '../../../components/ui/button.jsx';
+import { Card } from '../../../components/ui/card.jsx';
 import { cartService } from '../../cart/services/cartService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
@@ -36,7 +37,6 @@ export const ProductCard = ({ product }) => {
   const displayTitle = title || name || 'Product';
   const displayImage = getProductImageUrl(product);
 
-  // Extract human-readable category name and ignore numeric or UUID IDs
   const getReadableCategoryName = () => {
     if (category_name) return category_name;
     if (typeof category === 'object' && category?.name) return category.name;
@@ -76,11 +76,11 @@ export const ProductCard = ({ product }) => {
   };
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-neutral-200/80 bg-white transition-all duration-200 hover:-translate-y-1 hover:border-neutral-300 hover:shadow-lg">
+    <Card className="group relative flex flex-col overflow-hidden rounded-2xl border-border bg-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5">
       {/* Product Image */}
       <Link
         to={ROUTE_PATHS.STOREFRONT.PRODUCT_DETAILS(slug || id)}
-        className="relative aspect-square w-full overflow-hidden bg-neutral-50"
+        className="relative aspect-square w-full overflow-hidden bg-muted/40"
       >
         {displayImage && !imgError ? (
           <img
@@ -91,8 +91,8 @@ export const ProductCard = ({ product }) => {
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-neutral-50 text-neutral-400">
-            <Package size={36} className="stroke-[1.5] text-neutral-300" />
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Package size={36} className="stroke-[1.5] text-muted-foreground/50" />
             <span className="text-xs font-medium">No image available</span>
           </div>
         )}
@@ -100,12 +100,15 @@ export const ProductCard = ({ product }) => {
         {/* Badges */}
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
           {displayCategory && (
-            <Badge variant="secondary" className="bg-white/90 text-xs backdrop-blur-xs font-medium text-neutral-800">
+            <Badge
+              variant="outline"
+              className="border-primary/20 bg-card/90 text-primary text-[11px] font-semibold backdrop-blur-xs shadow-2xs"
+            >
               {displayCategory}
             </Badge>
           )}
           {!in_stock && (
-            <Badge variant="destructive" className="text-xs">
+            <Badge variant="destructive" className="text-[11px]">
               Out of stock
             </Badge>
           )}
@@ -115,15 +118,15 @@ export const ProductCard = ({ product }) => {
       {/* Product Information */}
       <div className="flex flex-1 flex-col p-4">
         {displayRating && (
-          <div className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-amber-500">
-            <Star size={13} className="fill-amber-400 stroke-amber-500" />
+          <div className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-chart-5">
+            <Star size={13} className="fill-chart-5 stroke-chart-5" />
             <span>{Number(displayRating).toFixed(1)}</span>
           </div>
         )}
 
         <Link
           to={ROUTE_PATHS.STOREFRONT.PRODUCT_DETAILS(slug || id)}
-          className="line-clamp-2 text-sm font-semibold text-neutral-900 transition-colors hover:text-amber-600"
+          className="line-clamp-2 text-sm font-semibold text-card-foreground transition-colors hover:text-primary"
           title={displayTitle}
         >
           {displayTitle}
@@ -131,30 +134,37 @@ export const ProductCard = ({ product }) => {
 
         {/* Price & Add to Cart button */}
         <div className="mt-auto pt-4 flex items-center justify-between gap-2">
-          <PriceDisplay price={price} originalPrice={displayOriginalPrice} />
+          <PriceDisplay
+            price={price}
+            originalPrice={displayOriginalPrice}
+            priceClassName="text-base font-bold text-foreground"
+            originalPriceClassName="text-xs text-muted-foreground line-through"
+          />
 
           <Button
             size="sm"
             disabled={!in_stock || addToCartMutation.isPending}
             onClick={handleAddToCart}
             variant={isAdded ? 'secondary' : 'default'}
-            className="h-9 px-3 transition-colors"
+            className={`h-8 px-3 text-xs font-semibold transition-all ${
+              isAdded ? 'bg-chart-2/15 text-chart-2 border border-chart-2/30' : ''
+            }`}
           >
             {isAdded ? (
               <>
-                <Check size={16} className="text-emerald-600 mr-1" />
-                <span className="text-xs">Added</span>
+                <Check size={14} className="mr-1 stroke-[2.5]" />
+                <span>Added</span>
               </>
             ) : (
               <>
-                <ShoppingCart size={15} className="mr-1" />
-                <span className="text-xs">Add</span>
+                <ShoppingCart size={14} className="mr-1" />
+                <span>Add</span>
               </>
             )}
           </Button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };
 

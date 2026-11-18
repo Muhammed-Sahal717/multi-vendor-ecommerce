@@ -4,7 +4,7 @@ import { Footer } from '../components/shared/Footer.jsx';
 
 export const StorefrontLayout = () => {
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50/50 text-neutral-900">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       <Navbar />
       <main className="flex-1">
         <Outlet />

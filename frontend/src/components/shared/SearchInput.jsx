@@ -32,23 +32,24 @@ export const SearchInput = ({
   return (
     <form onSubmit={handleSubmit} className={`relative flex items-center ${className}`}>
       <Search
-        size={18}
-        className="pointer-events-none absolute left-3 text-neutral-400"
+        size={16}
+        className="pointer-events-none absolute left-3.5 text-muted-foreground"
       />
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-full border border-neutral-200 bg-neutral-50 pl-10 pr-9 text-sm text-neutral-900 transition-colors placeholder:text-neutral-400 focus:border-neutral-900 focus:bg-white focus:outline-none"
+        className="h-9 w-full rounded-full border border-border bg-muted/50 pl-9 pr-9 text-xs font-medium text-foreground transition-all placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
       />
       {query && (
         <button
           type="button"
           onClick={handleClear}
-          className="absolute right-3 text-neutral-400 hover:text-neutral-600"
+          className="absolute right-3 text-muted-foreground hover:text-foreground"
+          aria-label="Clear search"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
       )}
     </form>

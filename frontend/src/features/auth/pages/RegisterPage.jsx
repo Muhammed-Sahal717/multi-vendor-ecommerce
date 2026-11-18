@@ -4,6 +4,7 @@ import { Eye, EyeOff, UserPlus, AlertCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
 import { Label } from '../../../components/ui/label.jsx';
+import { Card } from '../../../components/ui/card.jsx';
 import { Alert, AlertDescription } from '../../../components/ui/alert.jsx';
 import { authService } from '../services/authService.js';
 import { useAuthStore } from '../../../stores/authStore.js';
@@ -118,20 +119,20 @@ export const RegisterPage = () => {
   };
 
   return (
-    <div className="rounded-3xl border border-neutral-200/80 bg-white p-8 shadow-xl shadow-neutral-100 sm:p-10">
+    <Card className="rounded-3xl border-border bg-card p-8 shadow-xl text-card-foreground sm:p-10">
       <div className="text-center">
-        <h1 className="text-2xl font-black tracking-tight text-neutral-900 sm:text-3xl">
+        <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
           Create an account
         </h1>
-        <p className="mt-2 text-sm text-neutral-500">
+        <p className="mt-2 text-sm text-muted-foreground">
           Join Galla to order products, track packages, and receive exclusive offers.
         </p>
       </div>
 
       {errorMessage && (
-        <Alert variant="destructive" className="mt-6 border-red-200 bg-red-50 text-red-800">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-xs font-medium">{errorMessage}</AlertDescription>
+        <Alert variant="destructive" className="mt-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-xs font-semibold">{errorMessage}</AlertDescription>
         </Alert>
       )}
 
@@ -139,7 +140,7 @@ export const RegisterPage = () => {
         {/* Name Fields */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="first_name" className="text-xs font-semibold text-neutral-700">
+            <Label htmlFor="first_name" className="text-xs font-semibold text-foreground">
               First name *
             </Label>
             <Input
@@ -150,12 +151,12 @@ export const RegisterPage = () => {
               placeholder="John"
               value={formData.first_name}
               onChange={handleChange}
-              className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 text-sm focus:border-neutral-900 focus:bg-white"
+              className="h-10 rounded-xl border-input bg-background/50 text-sm focus:border-primary focus:bg-card"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="last_name" className="text-xs font-semibold text-neutral-700">
+            <Label htmlFor="last_name" className="text-xs font-semibold text-foreground">
               Last name
             </Label>
             <Input
@@ -165,14 +166,14 @@ export const RegisterPage = () => {
               placeholder="Doe"
               value={formData.last_name}
               onChange={handleChange}
-              className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 text-sm focus:border-neutral-900 focus:bg-white"
+              className="h-10 rounded-xl border-input bg-background/50 text-sm focus:border-primary focus:bg-card"
             />
           </div>
         </div>
 
         {/* Email */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-xs font-semibold text-neutral-700">
+          <Label htmlFor="email" className="text-xs font-semibold text-foreground">
             Email address *
           </Label>
           <Input
@@ -184,13 +185,13 @@ export const RegisterPage = () => {
             placeholder="you@example.com"
             value={formData.email}
             onChange={handleChange}
-            className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 text-sm focus:border-neutral-900 focus:bg-white"
+            className="h-10 rounded-xl border-input bg-background/50 text-sm focus:border-primary focus:bg-card"
           />
         </div>
 
         {/* Password */}
         <div className="space-y-1.5">
-          <Label htmlFor="password" className="text-xs font-semibold text-neutral-700">
+          <Label htmlFor="password" className="text-xs font-semibold text-foreground">
             Password (min 8 characters) *
           </Label>
           <div className="relative">
@@ -203,12 +204,12 @@ export const RegisterPage = () => {
               placeholder="••••••••"
               value={formData.password}
               onChange={handleChange}
-              className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 pr-10 text-sm focus:border-neutral-900 focus:bg-white"
+              className="h-10 rounded-xl border-input bg-background/50 pr-10 text-sm focus:border-primary focus:bg-card"
             />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-neutral-400 hover:text-neutral-600"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -218,7 +219,7 @@ export const RegisterPage = () => {
 
         {/* Confirm Password */}
         <div className="space-y-1.5">
-          <Label htmlFor="confirm_password" className="text-xs font-semibold text-neutral-700">
+          <Label htmlFor="confirm_password" className="text-xs font-semibold text-foreground">
             Confirm password *
           </Label>
           <div className="relative">
@@ -231,12 +232,12 @@ export const RegisterPage = () => {
               placeholder="••••••••"
               value={formData.confirm_password}
               onChange={handleChange}
-              className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 pr-10 text-sm focus:border-neutral-900 focus:bg-white"
+              className="h-10 rounded-xl border-input bg-background/50 pr-10 text-sm focus:border-primary focus:bg-card"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-neutral-400 hover:text-neutral-600"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
               aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
             >
               {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -248,11 +249,11 @@ export const RegisterPage = () => {
         <Button
           type="submit"
           disabled={isLoading}
-          className="mt-2 h-11 w-full rounded-xl bg-neutral-900 text-sm font-bold text-white transition-all hover:bg-neutral-800"
+          className="mt-2 h-10 w-full rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
               <span>Creating account...</span>
             </div>
           ) : (
@@ -265,16 +266,16 @@ export const RegisterPage = () => {
       </form>
 
       {/* Switch to Login */}
-      <div className="mt-8 border-t border-neutral-100 pt-6 text-center text-xs text-neutral-500">
+      <div className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground">
         Already have an account?{' '}
         <Link
           to={ROUTE_PATHS.AUTH.LOGIN}
-          className="font-bold text-neutral-900 underline-offset-4 hover:underline"
+          className="font-bold text-primary underline-offset-4 hover:underline"
         >
           Sign In
         </Link>
       </div>
-    </div>
+    </Card>
   );
 };
 

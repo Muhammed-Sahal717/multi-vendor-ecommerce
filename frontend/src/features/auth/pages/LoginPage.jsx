@@ -4,6 +4,7 @@ import { Eye, EyeOff, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
 import { Label } from '../../../components/ui/label.jsx';
+import { Card } from '../../../components/ui/card.jsx';
 import { Alert, AlertDescription } from '../../../components/ui/alert.jsx';
 import { authService } from '../services/authService.js';
 import { useAuthStore } from '../../../stores/authStore.js';
@@ -95,36 +96,36 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="rounded-3xl border border-neutral-200/80 bg-white p-8 shadow-xl shadow-neutral-100 sm:p-10">
+    <Card className="rounded-3xl border-border bg-card p-8 shadow-xl text-card-foreground sm:p-10">
       <div className="text-center">
-        <h1 className="text-2xl font-black tracking-tight text-neutral-900 sm:text-3xl">
+        <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
           Welcome back
         </h1>
-        <p className="mt-2 text-sm text-neutral-500">
+        <p className="mt-2 text-sm text-muted-foreground">
           Sign in to access your orders, wishlist, and dashboard.
         </p>
       </div>
 
       {location.state?.registered && !errorMessage && (
-        <Alert className="mt-6 border-emerald-200 bg-emerald-50 text-emerald-800">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <AlertDescription className="text-xs font-medium">
+        <Alert className="mt-6 border-chart-4/30 bg-chart-4/15 text-foreground">
+          <CheckCircle2 className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-xs font-semibold">
             Account created successfully! Please sign in with your credentials.
           </AlertDescription>
         </Alert>
       )}
 
       {errorMessage && (
-        <Alert variant="destructive" className="mt-6 border-red-200 bg-red-50 text-red-800">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-xs font-medium">{errorMessage}</AlertDescription>
+        <Alert variant="destructive" className="mt-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-xs font-semibold">{errorMessage}</AlertDescription>
         </Alert>
       )}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         {/* Email */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-xs font-semibold text-neutral-700">
+          <Label htmlFor="email" className="text-xs font-semibold text-foreground">
             Email address
           </Label>
           <Input
@@ -136,14 +137,14 @@ export const LoginPage = () => {
             placeholder="you@example.com"
             value={formData.email}
             onChange={handleChange}
-            className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 text-sm focus:border-neutral-900 focus:bg-white"
+            className="h-10 rounded-xl border-input bg-background/50 text-sm focus:border-primary focus:bg-card"
           />
         </div>
 
         {/* Password */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-xs font-semibold text-neutral-700">
+            <Label htmlFor="password" className="text-xs font-semibold text-foreground">
               Password
             </Label>
           </div>
@@ -157,12 +158,12 @@ export const LoginPage = () => {
               placeholder="••••••••"
               value={formData.password}
               onChange={handleChange}
-              className="h-11 rounded-xl border-neutral-200 bg-neutral-50/50 pr-10 text-sm focus:border-neutral-900 focus:bg-white"
+              className="h-10 rounded-xl border-input bg-background/50 pr-10 text-sm focus:border-primary focus:bg-card"
             />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-neutral-400 hover:text-neutral-600"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -174,11 +175,11 @@ export const LoginPage = () => {
         <Button
           type="submit"
           disabled={isLoading}
-          className="mt-2 h-11 w-full rounded-xl bg-neutral-900 text-sm font-bold text-white transition-all hover:bg-neutral-800"
+          className="mt-2 h-10 w-full rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
               <span>Signing in...</span>
             </div>
           ) : (
@@ -191,16 +192,16 @@ export const LoginPage = () => {
       </form>
 
       {/* Switch to Register */}
-      <div className="mt-8 border-t border-neutral-100 pt-6 text-center text-xs text-neutral-500">
+      <div className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground">
         Don&apos;t have an account?{' '}
         <Link
           to={ROUTE_PATHS.AUTH.REGISTER}
-          className="font-bold text-neutral-900 underline-offset-4 hover:underline"
+          className="font-bold text-primary underline-offset-4 hover:underline"
         >
           Create an account
         </Link>
       </div>
-    </div>
+    </Card>
   );
 };
 
