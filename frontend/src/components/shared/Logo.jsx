@@ -1,19 +1,27 @@
 import { Link } from 'react-router-dom';
-import { ShoppingBag } from 'lucide-react';
 import { ROUTE_PATHS } from '../../routes/routePaths.js';
 
-export const Logo = ({ className = '', iconSize = 20, textClassName = 'text-xl' }) => {
+export const Logo = ({
+  className = '',
+  imgClassName = 'h-8 w-8 sm:h-9 sm:w-9',
+  textClassName = 'text-xl',
+  showText = true,
+}) => {
   return (
     <Link
       to={ROUTE_PATHS.STOREFRONT.HOME}
-      className={`inline-flex items-center gap-2 font-bold tracking-tight text-foreground transition-opacity hover:opacity-90 ${className}`}
+      className={`group inline-flex items-center gap-2.5 font-bold tracking-tight text-foreground transition-opacity hover:opacity-95 ${className}`}
     >
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
-        <ShoppingBag size={iconSize} className="stroke-[2.5]" />
-      </div>
-      <span className={`font-black tracking-wider uppercase text-foreground ${textClassName}`}>
-        GALLA<span className="text-primary">.</span>
-      </span>
+      <img
+        src="/logo.png"
+        alt="GALLA."
+        className={`object-contain shrink-0 transition-transform duration-300 group-hover:scale-105 drop-shadow-xs dark:drop-shadow-[0_0_8px_rgba(255,255,255,0.2)] ${imgClassName}`}
+      />
+      {showText && (
+        <span className={`font-black tracking-wider uppercase text-foreground font-heading select-none ${textClassName}`}>
+          GALLA<span className="text-primary">.</span>
+        </span>
+      )}
     </Link>
   );
 };

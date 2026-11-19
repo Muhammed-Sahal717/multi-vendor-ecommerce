@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Sparkles, TrendingUp, Store } from 'lucide-react';
-import { HeroBanner } from '../components/HeroBanner.jsx';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import { HeroCarousel } from '../components/HeroCarousel.jsx';
 import { CategoryCard } from '../components/CategoryCard.jsx';
 import { ProductCard } from '../components/ProductCard.jsx';
 import { LoadingState } from '../../../components/shared/LoadingState.jsx';
@@ -24,15 +24,15 @@ export const HomePage = () => {
     queryFn: catalogService.getCategories,
   });
 
-  // 2. Fetch Latest Products
+  // 2. Fetch Latest Products (fetching 10 for the 5-column small card layout)
   const {
     data: productsData,
     isLoading: isLoadingProducts,
     isError: isErrorProducts,
     refetch: refetchProducts,
   } = useQuery({
-    queryKey: queryKeys.catalog.products({ page_size: 8 }),
-    queryFn: () => catalogService.getProducts({ page_size: 8 }),
+    queryKey: queryKeys.catalog.products({ page_size: 10 }),
+    queryFn: () => catalogService.getProducts({ page_size: 10 }),
   });
 
   const categories = Array.isArray(categoriesData)
@@ -44,37 +44,14 @@ export const HomePage = () => {
     : productsData?.results || [];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-16">
-      {/* 1. Hero Section */}
-      <HeroBanner />
-
-      {/* 2. Top Categories Section */}
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-16">
+      {/* 1. Hero Image Carousel (No text or CTA overlays, pure carousel) */}
       <section>
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <Badge
-              variant="outline"
-              className="gap-1.5 border-primary/25 bg-primary/10 text-primary font-bold uppercase tracking-wider text-[11px] px-2.5 py-0.5"
-            >
-              <Sparkles size={12} className="stroke-[2.5]" />
-              <span>Explore Collections</span>
-            </Badge>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
-              Browse Categories
-            </h2>
-          </div>
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
-          >
-            <Link to={ROUTE_PATHS.STOREFRONT.CATEGORIES}>
-              View All <ArrowRight size={14} />
-            </Link>
-          </Button>
-        </div>
+        <HeroCarousel />
+      </section>
 
+      {/* 2. Categories Section (Directly under carousel, horizontal slide if overflow) */}
+      <section className="-mt-8 sm:-mt-10">
         {isLoadingCategories ? (
           <LoadingState message="Loading categories..." />
         ) : isErrorCategories ? (
@@ -84,47 +61,34 @@ export const HomePage = () => {
             onRetry={refetchCategories}
           />
         ) : categories.length === 0 ? (
-          <p className="text-center text-xs text-muted-foreground py-8">
+          <p className="text-center text-xs text-muted-foreground py-4">
             No categories available right now.
           </p>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 sm:gap-3">
-            {categories.slice(0, 8).map((cat, index) => (
-              <CategoryCard
-                key={cat.id || cat.slug}
-                category={cat}
-                index={index}
-              />
-            ))}
+          <div className="w-full overflow-x-auto scrollbar-none pb-3 pt-1 px-1">
+            <div className="flex items-center justify-start sm:justify-center gap-4 sm:gap-6 md:gap-8 w-max min-w-full px-2">
+              {categories.map((cat, index) => (
+                <CategoryCard
+                  key={cat.id || cat.slug}
+                  category={cat}
+                  index={index}
+                />
+              ))}
+            </div>
           </div>
         )}
       </section>
 
       {/* 3. Featured / Trending Products Section */}
-      <section>
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <Badge
-              variant="outline"
-              className="gap-1.5 border-chart-2/30 bg-chart-2/15 text-chart-2 font-bold uppercase tracking-wider text-[11px] px-2.5 py-0.5"
-            >
-              <TrendingUp size={12} className="stroke-[2.5]" />
-              <span>Popular Picks</span>
-            </Badge>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
-              Trending Products
-            </h2>
-          </div>
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
-          >
-            <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>
-              Explore More <ArrowRight size={14} />
-            </Link>
-          </Button>
+      <section className="space-y-6">
+        {/* Centered Heading */}
+        <div className="text-center max-w-xl mx-auto space-y-1.5">
+          <h2 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
+            Trending Products
+          </h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Top-rated artisanal products, unique crafts, and bestsellers from regional creators
+          </p>
         </div>
 
         {isLoadingProducts ? (
@@ -144,39 +108,68 @@ export const HomePage = () => {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {products.map((prod) => (
-              <ProductCard key={prod.id || prod.slug} product={prod} />
-            ))}
+          <div>
+            {/* Small & compact cards grid (2-cols mobile, 3-cols tablet, 4-cols laptop, 5-cols desktop) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
+              {products.map((prod, index) => (
+                <ProductCard key={prod.id || prod.slug} product={prod} index={index} />
+              ))}
+            </div>
+
+            {/* Centered View All Products Button */}
+            <div className="mt-10 flex justify-center">
+              <Button
+                asChild
+                className="group h-11 rounded-full font-bold px-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/25 text-xs sm:text-sm transition-all cursor-pointer"
+              >
+                <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS} className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                  <span>Explore All Products</span>
+                  <ArrowRight size={16} className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
+                </Link>
+              </Button>
+            </div>
           </div>
         )}
       </section>
 
-      {/* 4. Merchant CTA Banner */}
-      <section className="relative overflow-hidden rounded-3xl border border-primary/25 bg-gradient-to-r from-primary/10 via-chart-2/10 to-chart-4/10 p-8 sm:p-12 text-foreground shadow-sm">
-        <div className="relative z-10 flex flex-col items-center justify-between gap-6 text-center md:flex-row md:text-left">
-          <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-xs">
-              <Store size={14} />
-              <span>Seller Onboarding Open</span>
-            </div>
-            <h3 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl text-foreground font-heading">
-              Grow your business with Galla.
-            </h3>
-            <p className="mt-2 text-sm sm:text-base font-medium text-muted-foreground">
-              Join hundreds of verified merchants. List your products, accept orders with automated delivery tracking, and receive prompt payouts.
-            </p>
+      {/* 4. Become a Seller Card (Simple clean card with /seller.jpg as background) */}
+      <section className="relative overflow-hidden rounded-3xl border border-border/80 shadow-md">
+        {/* Background Image from public/seller.jpg */}
+        <img
+          src="/seller.jpg"
+          alt="Grow your business on Galla"
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
+
+        {/* Contrast Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/75 to-slate-950/40" />
+
+        {/* Simple Content Container */}
+        <div className="relative z-10 flex flex-col justify-center items-start p-8 sm:p-12 lg:p-16 max-w-2xl space-y-4 text-left">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/20 px-3.5 py-1 text-xs font-bold text-white backdrop-blur-md shadow-xs">
+            <Sparkles size={13} className="text-primary-foreground" />
+            <span>Seller Onboarding Open</span>
           </div>
 
-          <Button
-            asChild
-            size="lg"
-            className="bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-md shadow-primary/20 shrink-0"
-          >
-            <Link to={ROUTE_PATHS.SELLER.APPLICATION}>
-              Apply to Sell <ArrowRight size={17} className="ml-1" />
-            </Link>
-          </Button>
+          <h3 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white font-heading leading-tight">
+            Grow your business with Galla.
+          </h3>
+
+          <p className="text-xs sm:text-base font-medium text-slate-200 leading-relaxed max-w-xl">
+            Join hundreds of verified merchants and master artisans. List your handcrafted products, reach thousands of buyers nationwide, and receive prompt weekly bank payouts.
+          </p>
+
+          <div className="pt-2">
+            <Button
+              asChild
+              className="group h-12 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/30 text-xs sm:text-sm px-7 transition-all cursor-pointer"
+            >
+              <Link to={ROUTE_PATHS.SELLER.APPLICATION} className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                <span>Apply to Sell on Galla</span>
+                <ArrowRight size={16} className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
     </div>

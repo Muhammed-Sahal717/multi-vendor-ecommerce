@@ -203,8 +203,8 @@ export const CartPage = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {recommendedProducts.slice(0, 4).map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {recommendedProducts.slice(0, 4).map((product, index) => (
+                <ProductCard key={product.id} product={product} index={index} />
               ))}
             </div>
           </div>
@@ -292,8 +292,8 @@ export const CartPage = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {recommendedProducts.slice(0, 4).map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {recommendedProducts.slice(0, 4).map((product, index) => (
+              <ProductCard key={product.id} product={product} index={index} />
             ))}
           </div>
         </div>

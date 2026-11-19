@@ -9,8 +9,8 @@ export const Footer = () => {
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           {/* Branding Column */}
           <div className="space-y-4">
-            <Logo />
-            <p className="text-sm text-muted-foreground">
+            <Logo imgClassName="h-9 w-9 sm:h-10 sm:w-10" textClassName="text-2xl" />
+            <p className="text-sm text-muted-foreground leading-relaxed">
               GALLA. is a trusted multi-vendor marketplace connecting authentic regional merchants with customers nationwide.
             </p>
           </div>
