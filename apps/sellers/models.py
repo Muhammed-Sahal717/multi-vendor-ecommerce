@@ -1,6 +1,8 @@
+from decimal import Decimal
 import uuid
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 
@@ -114,3 +116,130 @@ class SellerProfile(models.Model):
 
     def __str__(self):
         return f"{self.business_name} ({self.user.email})"
+
+
+class SellerEarning(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    seller = models.ForeignKey(
+        SellerProfile,
+        on_delete=models.PROTECT,
+        related_name="earnings",
+    )
+
+    order_item = models.OneToOneField(
+        "orders.OrderItem",
+        on_delete=models.PROTECT,
+        related_name="earning",
+    )
+
+    gross_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+
+    commission_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.0500"),
+    )
+
+    commission_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+
+    net_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["seller", "-created_at"],
+                name="seller_earning_created_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(gross_amount__gte=0),
+                name="earning_gross_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(commission_amount__gte=0),
+                name="earning_commission_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(net_amount__gte=0),
+                name="earning_net_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Earning {self.id} - {self.seller.business_name} (Net: {self.net_amount})"
+
+
+class SellerPayout(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    seller = models.ForeignKey(
+        SellerProfile,
+        on_delete=models.PROTECT,
+        related_name="payouts",
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+
+    payout_date = models.DateField()
+
+    transaction_reference = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    notes = models.TextField(blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="recorded_seller_payouts",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["seller", "-created_at"],
+                name="seller_payout_created_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0),
+                name="payout_amount_strictly_positive",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Payout {self.transaction_reference} - {self.seller.business_name} ({self.amount})"

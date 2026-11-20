@@ -1,8 +1,11 @@
 from rest_framework import serializers
 from .models import Category, Product, ProductImage
 from django.db import transaction
+from apps.common.permissions import IsPlatformAdmin
 from apps.sellers.models import SellerProfile
 from PIL import Image, UnidentifiedImageError
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -30,8 +33,46 @@ class CategorySerializer(serializers.ModelSerializer):
         ]
 
     def get_subcategories(self, obj):
-        children = obj.subcategories.filter(is_active=True)
-        return CategorySerializer(children, many=True).data
+        request = self.context.get("request")
+        include_inactive = (
+            request
+            and request.query_params.get("include_inactive", "").lower() == "true"
+            and IsPlatformAdmin().has_permission(request, None)
+        )
+        if include_inactive:
+            children = obj.subcategories.all()
+        else:
+            children = obj.subcategories.filter(is_active=True)
+        return CategorySerializer(children, many=True, context=self.context).data
+
+    def validate(self, attrs):
+        parent = attrs.get("parent") if "parent" in attrs else (self.instance.parent if self.instance else None)
+        is_active = attrs.get("is_active") if "is_active" in attrs else (self.instance.is_active if self.instance else True)
+
+        if is_active and parent and not parent.is_active:
+            raise serializers.ValidationError(
+                {"parent": "Cannot place or activate a category under an inactive parent category."}
+            )
+
+        if self.instance and parent:
+            if parent.id == self.instance.id:
+                raise serializers.ValidationError(
+                    {"parent": "A category cannot be its own parent."}
+                )
+
+            current = parent
+            visited = set()
+            while current is not None:
+                if current.id == self.instance.id:
+                    raise serializers.ValidationError(
+                        {"parent": "Cannot move a category under one of its descendants."}
+                    )
+                if current.id in visited:
+                    break
+                visited.add(current.id)
+                current = current.parent
+
+        return attrs
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -43,6 +84,8 @@ class ProductSerializer(serializers.ModelSerializer):
         source="category.name",
         read_only=True,
     )
+    primary_image = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -61,6 +104,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "status",
             "rejection_reason",
             "is_active",
+            "primary_image",
+            "images",
             "created_at",
             "updated_at",
         ]
@@ -72,8 +117,31 @@ class ProductSerializer(serializers.ModelSerializer):
             "slug",
             "status",
             "rejection_reason",
+            "primary_image",
+            "images",
             "created_at",
             "updated_at",
+        ]
+
+    def get_primary_image(self, obj):
+        primary = obj.images.filter(is_primary=True).first() or obj.images.first()
+        if primary and primary.image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
+        return None
+
+    def get_images(self, obj):
+        request = self.context.get("request")
+        return [
+            {
+                "id": str(img.id),
+                "image": request.build_absolute_uri(img.image.url) if request else img.image.url,
+                "is_primary": img.is_primary,
+                "display_order": img.display_order,
+            }
+            for img in obj.images.all()
         ]
 
     def validate_category(self, category):
@@ -87,14 +155,26 @@ class ProductSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        user = self.context["request"].user
-
+        request = self.context["request"]
+        user = request.user
         seller = SellerProfile.objects.get(user=user)
 
-        return Product.objects.create(
-            seller=seller,
-            **validated_data,
-        )
+        with transaction.atomic():
+            product = Product.objects.create(
+                seller=seller,
+                **validated_data,
+            )
+
+            record_audit_event(
+                actor=user,
+                action=AuditAction.PRODUCT_CREATED,
+                entity_type=AuditEntity.PRODUCT,
+                entity_id=product.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
+
+        return product
 
     def to_internal_value(self, data):
         protected_fields = {
@@ -131,6 +211,8 @@ class ProductSerializer(serializers.ModelSerializer):
             for field in sensitive_fields
         )
 
+        request = self.context.get("request")
+
         with transaction.atomic():
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
@@ -140,6 +222,15 @@ class ProductSerializer(serializers.ModelSerializer):
                 instance.rejection_reason = ""
 
             instance.save()
+
+            record_audit_event(
+                actor=request.user if request else instance.seller.user,
+                action=AuditAction.PRODUCT_UPDATED,
+                entity_type=AuditEntity.PRODUCT,
+                entity_id=instance.id,
+                ip_address=request.META.get("REMOTE_ADDR") if request else None,
+                user_agent=request.META.get("HTTP_USER_AGENT", "") if request else "",
+            )
 
         return instance
 

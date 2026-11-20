@@ -1,0 +1,179 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: AUDIT
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `audit` app provides a centralized, security-hardened audit telemetry repository
+capturing state transitions and critical operational events across the Galla marketplace.
+Key capabilities:
+- Centralized `record_audit_event` service function.
+- Strictly validated whitelist of 21 audit actions and 9 entity types.
+- Recursive sensitive metadata sanitization (rejects payloads containing password, token,
+  secret, API key, card number, or CVV keys).
+- Application-level append-only behavior: `AuditEvent.save()` and `AuditEvent.delete()`
+  raise `ValidationError` if mutation or deletion of existing instances is attempted.
+  Note: QuerySet bulk operations (`.update()`, `.delete()`) and direct raw SQL bypass Django model
+  methods in SQL; database-level table triggers are recommended for defense-in-depth.
+- Superadmin-restricted query API (`GET /api/audit/`) with filtering and pagination.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. AuditEvent
+   - Table: `audit_auditevent`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `actor`: ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True,
+       related_name="audit_events")
+     * `action`: CharField(max_length=100, choices=AUDIT_ACTIONS)
+     * `entity_type`: CharField(max_length=50, choices=AUDIT_ENTITY_TYPES)
+     * `entity_id`: UUIDField()
+     * `metadata`: JSONField(default=dict, blank=True)
+     * `ip_address`: GenericIPAddressField(null=True, blank=True)
+     * `user_agent`: TextField(blank=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+   - Application-Level Append-Only Behavior:
+     * Overridden `save(*args, **kwargs)`: Checks `if not self._state.adding:` and raises
+       `ValidationError("Audit events cannot be modified.")`.
+     * Overridden `delete(*args, **kwargs)`: Raises `ValidationError("Audit events cannot be deleted.")`.
+     * Important Architectural Note: Django QuerySet methods (`AuditEvent.objects.filter(...).update(...)`
+       or `.delete()`) and direct raw SQL execute directly in PostgreSQL and bypass these model instance methods.
+   - Constraints & Indexes:
+     * `ordering = ["-created_at"]`
+     * Index: `Index(fields=["actor", "-created_at"])`
+     * Index: `Index(fields=["action", "-created_at"])`
+     * Index: `Index(fields=["entity_type", "entity_id"])`
+     * CheckConstraints: `audit_entity_type_not_empty`, `audit_action_not_empty`.
+
+
+C. API ENDPOINTS
+----------------
+Route mounted at `/api/audit/` via `config/urls.py`.
+
+1. GET /api/audit/
+   - View: `AuditEventListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsSuperAdmin]`: user must have role `superadmin`).
+     Note: Regular platform administrators (`role == 'admin'`), sellers, and customers are
+     denied access (HTTP 403 Forbidden).
+   - HTTP Methods: GET, HEAD, OPTIONS (Strictly Read-Only).
+   - Query Parameters:
+     * `action`: exact action name matching `AuditAction` (validated; invalid choice raises 400)
+     * `entity_type`: exact entity type matching `AuditEntity` (validated; invalid choice raises 400)
+     * `actor`: UUID of acting user (validated; invalid UUID format raises 400)
+     * `entity_id`: UUID of entity (validated; invalid UUID format raises 400)
+     * `date_from`, `date_to`: ISO date strings in YYYY-MM-DD format (validated)
+     * pagination via `AuditEventPagination`
+   - Successful Response (200 OK):
+     {
+       "count": 100,
+       "next": null,
+       "previous": null,
+       "results": [
+         {
+           "id": "<uuid>",
+           "actor": "<user_uuid>",
+           "actor_email": "admin@example.com",
+           "action": "ORDER_CREATED",
+           "entity_type": "order",
+           "entity_id": "<order_uuid>",
+           "metadata": { ... },
+           "ip_address": "127.0.0.1",
+           "user_agent": "Mozilla/5.0 ...",
+           "created_at": "2026-11-15T12:00:00Z"
+         }
+       ]
+     }
+   - Error Responses:
+     * 400 Bad Request: Invalid filter parameter (action, entity_type, UUID, or date).
+     * 401 Unauthorized: Missing or invalid token.
+     * 403 Forbidden: Authenticated user is not a superadmin.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Event Recording Service (`record_audit_event` in `apps.audit.services`):
+  1. Validates `action` against the whitelist of 21 actions.
+  2. Validates `entity_type` against the whitelist of 9 entity types.
+  3. Validates `metadata`: must be a dictionary.
+  4. Runs recursive key check on `metadata`: if any key contains `password`, `password_hash`,
+     `access_token`, `refresh_token`, `authorization`, `secret`, `api_key`, `card_number`,
+     or `cvv` (case-insensitive), raises `ValidationError` immediately.
+  5. Inserts and returns new `AuditEvent` record.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- `IsSuperAdmin`: Requires `request.user.role == User.Role.SUPERADMIN`.
+  Audit event records are confidential platform governance telemetry and are accessible
+  exclusively by super administrators.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Deletion Attempts: Calling `.delete()` on an `AuditEvent` instance raises `ValidationError`.
+- Mutation Attempts: Calling `.save()` on an existing `AuditEvent` instance raises `ValidationError`.
+- Sensitive Field Ingestion: Passing metadata with forbidden keys raises `ValidationError`
+  before database insertion.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Defines the canonical whitelist for the platform:
+- 21 Audit Actions (`AuditAction`):
+  1. `USER_REGISTERED`
+  2. `PROFILE_UPDATED`
+  3. `USER_ACTIVATED`
+  4. `USER_DEACTIVATED`
+  5. `SELLER_APPLICATION_SUBMITTED`
+  6. `SELLER_APPLICATION_APPROVED`
+  7. `SELLER_APPLICATION_REJECTED`
+  8. `SELLER_SUSPENDED`
+  9. `SELLER_REACTIVATED`
+  10. `PRODUCT_CREATED`
+  11. `PRODUCT_UPDATED`
+  12. `PRODUCT_APPROVED`
+  13. `PRODUCT_REJECTED`
+  14. `ORDER_CREATED`
+  15. `ORDER_ITEM_CANCELLED`
+  16. `ORDER_STATUS_CHANGED`
+  17. `PAYMENT_SUCCEEDED`
+  18. `PAYMENT_FAILED`
+  19. `PAYMENT_CANCELLED`
+  20. `SELLER_EARNING_RECORDED`
+  21. `SELLER_PAYOUT_RECORDED`
+
+- 9 Audit Entities (`AuditEntity`):
+  1. `user`
+  2. `seller`
+  3. `seller_application`
+  4. `product`
+  5. `order`
+  6. `order_item`
+  7. `payment`
+  8. `seller_earning`
+  9. `seller_payout`
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- ForeignKey to `apps.accounts.models.User` (`on_delete=models.SET_NULL`).
+- Used by all business applications (`accounts`, `sellers`, `catalog`, `orders`, `payments`).
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/audit/tests/` (4 test files):
+1. `test_services.py`: Whitelist validation, metadata sanitization, sensitive key rejection.
+2. `test_immutability.py`: Model-level rejection of update and delete operations.
+3. `test_api.py`: Superadmin audit endpoint listing, query parameter filtering (action, entity, date range), non-superadmin rejection (403).
+4. `test_admin.py`: Django admin integration and read-only behavior in admin panel.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- QuerySet bulk operations (`AuditEvent.objects.filter(...).update(...)` or `.delete()`) and direct
+  raw SQL bypass model instance methods unless protected at the PostgreSQL trigger level. Table-level
+  database triggers are recommended for production hardening.
+- Log retention, rotation, and cold storage archival (e.g. S3 Glacier) are deferred for future phases.
+================================================================================

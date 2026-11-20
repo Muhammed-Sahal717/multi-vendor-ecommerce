@@ -14,6 +14,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True,
     )
+    primary_image = serializers.SerializerMethodField()
     subtotal = serializers.SerializerMethodField()
     product_stock = serializers.IntegerField(
         source="product.stock",
@@ -29,6 +30,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_name",
             "product_slug",
             "product_price",
+            "primary_image",
             "quantity",
             "product_stock",
             "is_available",
@@ -41,10 +43,20 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_name",
             "product_slug",
             "product_price",
+            "primary_image",
             "subtotal",
             "created_at",
             "updated_at",
         ]
+
+    def get_primary_image(self, obj):
+        primary = obj.product.images.filter(is_primary=True).first() or obj.product.images.first()
+        if primary and primary.image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
+        return None
 
     def get_subtotal(self, obj):
         return obj.product.price * obj.quantity

@@ -1,0 +1,320 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: SELLERS
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `sellers` app manages vendor onboarding applications, vendor store profiles,
+earning recognition with platform commission deduction, and manual weekly payout
+recording for the Galla marketplace.
+Key capabilities:
+- Seller application submission by authenticated customers.
+- Administrative review workflow (approval/rejection) via HTTP PATCH.
+- Automatic transition of User role to `SELLER` upon application approval and
+  creation of an active `SellerProfile`.
+- Seller store profile management and administrative status toggles (`active`,
+  `suspended`, `inactive`).
+- Seller earnings calculation:
+  * Fixed 5% commission rate (`COMMISSION_RATE = Decimal("0.0500")`).
+  * Calculated strictly on the individual delivered product subtotal (`order_item.subtotal`),
+    excluding delivery charges and taxes.
+  * Rounding: quantize to `Decimal("0.01")` using `ROUND_HALF_UP`.
+  * Strict 1:1 `order_item` uniqueness preventing duplicate earnings.
+- Manual seller payouts:
+  * Administrative recording of completed offline/bank payouts.
+  * Strictly positive amounts validated against available balance.
+  * Concurrency protection via row-level locking (`select_for_update()`).
+  * Race-safe unique transaction reference enforcement via nested `transaction.atomic()`
+    savepoint, converting `IntegrityError` to a 400 ValidationError.
+  * Non-inflating admin earnings and payout aggregations using independent subqueries.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. SellerApplication
+   - Table: `sellers_sellerapplication`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `user`: ForeignKey(User, on_delete=models.CASCADE, related_name="seller_applications")
+     * `business_name`: CharField(max_length=150)
+     * `business_type`: CharField(max_length=100)
+     * `business_email`: EmailField()
+     * `business_phone`: CharField(max_length=15)
+     * `business_address`: CharField(max_length=255)
+     * `city`: CharField(max_length=100)
+     * `state`: CharField(max_length=100)
+     * `postal_code`: CharField(max_length=10)
+     * `country`: CharField(max_length=100, default="India")
+     * `website`: URLField(blank=True)
+     * `description`: TextField(blank=True)
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+       Choices: `pending`, `approved`, `rejected`
+     * `reviewed_by`: ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+       related_name="reviewed_seller_applications")
+     * `review_notes`: TextField(blank=True)
+     * `submitted_at`: DateTimeField(auto_now_add=True)
+     * `reviewed_at`: DateTimeField(null=True, blank=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * `ordering = ["-submitted_at"]`
+     * `UniqueConstraint(fields=["user"], condition=Q(status="pending"), name="unique_pending_seller_application")`
+       Guarantees at most one pending application per user at the database level.
+
+2. SellerProfile
+   - Table: `sellers_sellerprofile`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `user`: OneToOneField(User, on_delete=models.CASCADE, related_name="seller_profile")
+     * `business_name`: CharField(max_length=150)
+     * `business_type`: CharField(max_length=100)
+     * `business_email`: EmailField()
+     * `business_phone`: CharField(max_length=15)
+     * `business_address`: CharField(max_length=255)
+     * `city`: CharField(max_length=100)
+     * `state`: CharField(max_length=100)
+     * `postal_code`: CharField(max_length=10)
+     * `country`: CharField(max_length=100, default="India")
+     * `website`: URLField(blank=True)
+     * `description`: TextField(blank=True)
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+       Choices: `active`, `suspended`, `inactive`
+     * `approved_at`: DateTimeField() - Populated during admin review approval.
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Reverse Relationships:
+     * `products`: ForeignKey -> Product (`on_delete=models.PROTECT`, apps.catalog)
+     * `order_items`: ForeignKey -> OrderItem (`on_delete=models.PROTECT`, apps.orders)
+     * `earnings`: ForeignKey -> SellerEarning (`on_delete=models.PROTECT`)
+     * `payouts`: ForeignKey -> SellerPayout (`on_delete=models.PROTECT`)
+
+3. SellerEarning
+   - Table: `sellers_sellerearning`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `seller`: ForeignKey(SellerProfile, on_delete=models.PROTECT, related_name="earnings")
+     * `order_item`: OneToOneField("orders.OrderItem", on_delete=models.PROTECT, related_name="earning")
+     * `gross_amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `commission_rate`: DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.0500"))
+     * `commission_amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `net_amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+     * `created_at`: DateTimeField(auto_now_add=True) - Timestamp of earning recognition.
+   - Constraints & Indexes:
+     * Index: `seller_earning_created_idx` on `['seller', '-created_at']`
+     * CheckConstraints: `gross_amount >= 0`, `commission_amount >= 0`, `net_amount >= 0`.
+
+4. SellerPayout
+   - Table: `sellers_sellerpayout`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `seller`: ForeignKey(SellerProfile, on_delete=models.PROTECT, related_name="payouts")
+     * `amount`: DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+     * `payout_date`: DateField()
+     * `transaction_reference`: CharField(max_length=100, unique=True)
+     * `notes`: TextField(blank=True)
+     * `created_by`: ForeignKey(User, on_delete=models.PROTECT, related_name="recorded_seller_payouts")
+     * `created_at`: DateTimeField(auto_now_add=True)
+   - Constraints & Indexes:
+     * Index: `seller_payout_created_idx` on `['seller', '-created_at']`
+     * Unique index on `transaction_reference`.
+     * CheckConstraint: `amount > 0`.
+
+
+C. API ENDPOINTS
+----------------
+All routes mounted at `/api/sellers/` via `config/urls.py`.
+
+1. POST /api/sellers/applications/
+   - View: `SellerApplicationCreateView` (generics.CreateAPIView)
+   - Auth: Bearer JWT (IsAuthenticated)
+   - Request Body:
+     * `business_name` (string, required, max 150)
+     * `business_type` (string, required, max 100)
+     * `business_email` (string, required, email format)
+     * `business_phone` (string, required, max 15)
+     * `business_address` (string, required, max 255)
+     * `city` (string, required, max 100)
+     * `state` (string, required, max 100)
+     * `postal_code` (string, required, max 10)
+     * `country` (string, optional, default "India", max 100)
+     * `website` (string, optional, URL format, blank=True)
+     * `description` (string, optional, blank=True)
+   - Successful Response (201 Created): Application object with status `pending`.
+   - Error Responses:
+     * 400 Bad Request: If user is already an approved seller or has an active pending application.
+   - Side Effects: Records `SELLER_APPLICATION_SUBMITTED` audit event.
+
+2. GET /api/sellers/admin/applications/
+   - View: `AdminSellerApplicationListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Query Parameters: `status` (`pending`, `approved`, `rejected`), `search`, `page`, `page_size`.
+   - Successful Response (200 OK): Paginated list of vendor applications.
+
+3. PATCH /api/sellers/admin/applications/<uuid:pk>/review/
+   - View: `AdminSellerApplicationReviewView` (APIView, methods: PATCH)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Request Body:
+     * `action` (string, required: "approve" or "reject")
+     * `review_notes` (string, optional, blank=True)
+   - Successful Response (200 OK): Updated application object with review status.
+   - Error Responses:
+     * 400 Bad Request: If application status is not `pending`.
+     * 404 Not Found: Application does not exist.
+   - Side Effects:
+     * On approve: atomically sets application to `approved`, transitions user role to `seller`,
+       and creates active `SellerProfile`. Records `SELLER_APPLICATION_APPROVED` audit event.
+     * On reject: sets application to `rejected`. Records `SELLER_APPLICATION_REJECTED`.
+
+4. GET /api/sellers/admin/sellers/
+   - View: `AdminSellerListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Query Parameters: `status` (`active`, `suspended`, `inactive`), `search`, `ordering`, pagination.
+   - Successful Response (200 OK): Paginated list of seller profiles.
+
+5. GET /api/sellers/admin/sellers/<uuid:pk>/
+   - View: `AdminSellerDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Successful Response (200 OK): Full seller profile including application review notes.
+
+6. PATCH /api/sellers/admin/sellers/<uuid:pk>/status/
+   - View: `AdminSellerStatusUpdateView` (APIView, methods: PATCH)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Request Body:
+     * `status` (string, required: "active", "suspended", or "inactive")
+     * `reason` (string, optional)
+   - Successful Response (200 OK): Updated seller profile.
+   - Side Effects: Records `SELLER_SUSPENDED` or `SELLER_REACTIVATED` audit event.
+
+7. GET /api/sellers/admin/earnings/
+   - View: `AdminSellerEarningsOverviewView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Query Parameters: `status`, `search` (business_name, email), `ordering`, pagination.
+   - Successful Response (200 OK): Paginated seller list annotated with `total_gross_earnings`,
+     `total_commission_deducted`, `total_net_earnings`, `already_paid`, and `pending_payout_balance`.
+     Aggregated via independent database subqueries to prevent Cartesian product inflation.
+
+8. GET /api/sellers/admin/sellers/<uuid:pk>/earnings/
+   - View: `AdminSellerEarningsListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - Query Parameters: `date_from`, `date_to`, `ordering`, pagination.
+   - Successful Response (200 OK): Paginated item-by-item earning records for the target seller.
+
+9. GET, POST /api/sellers/admin/sellers/<uuid:pk>/payouts/
+   - View: `AdminSellerPayoutListCreateView` (generics.ListCreateAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin)
+   - GET: Paginated list of recorded payouts for the target seller.
+   - POST Request Body:
+     * `amount` (decimal string, required, strictly > 0)
+     * `payout_date` (date string YYYY-MM-DD, required)
+     * `transaction_reference` (string, required, unique)
+     * `notes` (string, optional, blank=True)
+   - Successful Response (201 Created): Created `SellerPayout` object.
+   - Error Responses:
+     * 400 Bad Request: Amount <= 0, amount > available balance, duplicate transaction reference.
+     * 404 Not Found: Seller not found.
+   - Concurrency Protections & Side Effects:
+     * Acquires row lock on `SellerProfile` using `select_for_update()`.
+     * Validates available balance inside the locked transaction.
+     * Inserts payout within a nested `transaction.atomic()` savepoint. If a race collision on
+       `transaction_reference` occurs, catches `IntegrityError` and raises a clean 400 ValidationError.
+     * Records `SELLER_PAYOUT_RECORDED` audit event.
+
+10. GET, PATCH /api/sellers/profile/
+    - View: `SellerProfileView` (generics.RetrieveUpdateAPIView, methods: GET, PATCH, OPTIONS)
+    - Auth: Bearer JWT (IsActiveSeller)
+    - Successful Response (200 OK): Authenticated seller's own store profile.
+    - PATCH Body: Editable business contact details (`business_phone`, `business_address`, `description`, etc.).
+
+11. GET /api/sellers/earnings/dashboard/
+    - View: `SellerEarningsDashboardView` (APIView, methods: GET)
+    - Auth: Bearer JWT (IsActiveSeller)
+    - Successful Response (200 OK):
+      `{ "total_gross_earnings", "total_commission_deducted", "total_net_earnings", "already_paid", "pending_payout_balance" }`
+
+12. GET /api/sellers/earnings/
+    - View: `SellerEarningsListView` (generics.ListAPIView)
+    - Auth: Bearer JWT (IsActiveSeller)
+    - Query Parameters: `ordering` (`created_at`, `gross_amount`, `net_amount`), pagination.
+    - Successful Response (200 OK): Paginated item-by-item earning records for the authenticated seller.
+
+13. GET /api/sellers/payouts/
+    - View: `SellerPayoutListView` (generics.ListAPIView)
+    - Auth: Bearer JWT (IsActiveSeller)
+    - Query Parameters: `ordering` (`-created_at`, `-payout_date`, `amount`), pagination.
+    - Successful Response (200 OK): Paginated payout records for the authenticated seller.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Earning Recognition (`record_order_item_earning`):
+  1. Triggered when an `OrderItem` status transitions to `DELIVERED`.
+  2. Verifies payment eligibility: associated `Payment` must have status `SUCCESSFUL`.
+  3. `gross_amount = order_item.subtotal` (strictly product unit_price * quantity; delivery fee and taxes are excluded).
+  4. `commission_amount = (gross_amount * Decimal("0.0500")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`.
+  5. `net_amount = gross_amount - commission_amount`.
+  6. Idempotent persistence via `SellerEarning.objects.get_or_create(order_item=order_item, ...)`.
+  7. If newly created, records `SELLER_EARNING_RECORDED` audit event.
+- Manual Payout Recording (`record_seller_payout`):
+  1. Admin executes external bank transfer offline.
+  2. Admin enters payout amount, date, and reference.
+  3. Service acquires row lock on `SellerProfile` with `select_for_update()`.
+  4. Balance evaluated: `Sum(net_amount) - Sum(already_paid)`.
+  5. If `amount > available_balance`, raises 400 ValidationError.
+  6. Atomic insertion inside savepoint guarantees race-safe handling of duplicate references.
+  7. Records `SELLER_PAYOUT_RECORDED` audit event.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- `IsActiveSeller`: Requires `request.user.role == 'seller'` and `SellerProfile.objects.filter(user=request.user, status='active').exists()`.
+  Suspended sellers receive 403 Forbidden.
+- `IsPlatformAdmin`: Requires `role in ['admin', 'superadmin']`. Controls application review,
+  seller status changes, and payout creation.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Concurrent Payouts: Protected by `select_for_update()` row lock on the seller profile. Prevents double-spending of balance.
+- Concurrent Duplicate Transaction Reference: Protected by nested `transaction.atomic()` savepoint. Catches `IntegrityError` and returns `ValidationError({"transaction_reference": "A payout with this transaction reference already exists."})`.
+- Partially Cancelled Orders: Only order items reaching DELIVERED generate earnings; cancelled items generate zero earnings and zero commission.
+- Suspended Seller: Cannot log into seller views, cannot add or edit products, but historical earnings and payouts remain preserved.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Emits events via `apps.audit.services.record_audit_event`:
+- `SELLER_APPLICATION_SUBMITTED` (entity: `seller_application`, entity_id: app.id)
+- `SELLER_APPLICATION_APPROVED` (entity: `seller_application`, entity_id: app.id)
+- `SELLER_APPLICATION_REJECTED` (entity: `seller_application`, entity_id: app.id)
+- `SELLER_SUSPENDED` (entity: `seller`, entity_id: profile.id)
+- `SELLER_REACTIVATED` (entity: `seller`, entity_id: profile.id)
+- `SELLER_EARNING_RECORDED` (entity: `seller_earning`, entity_id: earning.id)
+- `SELLER_PAYOUT_RECORDED` (entity: `seller_payout`, entity_id: payout.id)
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- ForeignKey / OneToOne with `apps.accounts.models.User`.
+- OneToOne relation from `apps.orders.models.OrderItem` to `SellerEarning`.
+- Foreign key target for `apps.catalog.models.Product` and `apps.orders.models.OrderItem`.
+- Interacts with `apps.audit.services.record_audit_event`.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/sellers/tests/` (6 test files):
+1. `test_applications.py`: Application submission, duplicate restrictions, customer eligibility.
+2. `test_admin_review.py`: Admin approval/rejection workflows, role transition, profile creation.
+3. `test_seller_profile.py`: Profile retrieval, profile update, active seller permissions.
+4. `test_admin_seller_management.py`: Admin seller listing, filtering, suspension, reactivation.
+5. `test_seller_onboarding_catalog.py`: Full end-to-end integration test from application submission through approval and product creation.
+6. `test_earnings_and_payouts.py`: Earning recognition upon delivery, 5% commission calculation, COD confirmation earning release, admin dashboard aggregations, manual payout recording, balance validation, and multithreaded concurrency tests (`threading.Barrier`) for race conditions and duplicate transaction references.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Payouts are manually recorded after offline bank transfer; automated payment gateway payout
+  rails (e.g. Razorpay Route / Stripe Connect) are deferred for post-MVP.
+- Fixed 5% commission rate is hardcoded in constants (`COMMISSION_RATE = Decimal("0.0500")`).
+  Tiered or category-specific rates are not supported in MVP.
+- Automatic tax deduction at source (TDS) and GST invoices are not generated automatically.
+================================================================================

@@ -1,0 +1,249 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: CATALOG
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `catalog` app manages the product category taxonomy, seller product listings,
+product image galleries, and multi-tier product moderation.
+Key capabilities:
+- Hierarchical category tree with self-referencing parent foreign key and protected deletion.
+- Seller-driven product management (create, update, inventory management).
+- Admin product moderation workflow (approve / reject with rejection notes) via HTTP PATCH.
+- Public catalog browsing with strict visibility safeguards: only approved, active
+  products from active sellers with active categories are visible to buyers.
+- Product image galleries with a conditional database unique constraint guaranteeing
+  at most one primary image per product.
+- Product SKU uniqueness enforced per-seller via composite database constraint.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. Category
+   - Table: `catalog_categories`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `name`: CharField(max_length=100)
+     * `slug`: SlugField(max_length=120, unique=True)
+     * `description`: TextField(blank=True)
+     * `parent`: ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+       related_name='subcategories')
+     * `is_active`: BooleanField(default=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Methods: Auto-generates unique slug from `name` on save if not provided.
+
+2. Product
+   - Table: `catalog_products`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `seller`: ForeignKey('sellers.SellerProfile', on_delete=models.PROTECT,
+       related_name='products')
+     * `category`: ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
+     * `name`: CharField(max_length=200)
+     * `slug`: SlugField(max_length=220, unique=True)
+     * `sku`: CharField(max_length=100)
+     * `description`: TextField()
+     * `price`: DecimalField(max_digits=12, decimal_places=2,
+       validators=[MinValueValidator(0)])
+     * `stock`: PositiveIntegerField(default=0)
+     * `status`: CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+       Choices: `pending`, `approved`, `rejected`
+     * `rejection_reason`: TextField(blank=True)
+     * `is_active`: BooleanField(default=True)
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * Unique on `slug`.
+     * `UniqueConstraint(fields=["seller", "sku"], name="unique_product_sku_per_seller")`:
+       Enforces SKU uniqueness per individual seller, allowing different vendors to use their own SKU systems.
+     * `CheckConstraint(condition=Q(price__gte=0), name="product_price_non_negative")`.
+
+3. ProductImage
+   - Table: `catalog_product_images`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `product`: ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
+     * `image`: ImageField(upload_to="products/%Y/%m/")
+     * `is_primary`: BooleanField(default=False)
+     * `display_order`: PositiveIntegerField(default=0)
+     * `created_at`: DateTimeField(auto_now_add=True)
+   - Constraints & Indexes:
+     * `ordering = ["display_order", "created_at"]`
+     * Conditional UniqueConstraint:
+       `UniqueConstraint(fields=['product'], condition=Q(is_primary=True), name='unique_primary_image_per_product')`
+
+
+C. API ENDPOINTS
+----------------
+All routes mounted at `/api/catalog/` via `config/urls.py`.
+
+1. GET, POST /api/catalog/categories/
+   - View: `CategoryListCreateView` (generics.ListCreateAPIView)
+   - Auth: GET is Public (AllowAny); POST requires Platform Admin (IsPlatformAdmin).
+   - POST Request Body:
+     * `name` (string, required, max 100)
+     * `slug` (string, optional, auto-slugged from name)
+     * `description` (string, optional, blank=True)
+     * `parent` (UUID, optional, null=True)
+     * `is_active` (boolean, optional, default True)
+   - Successful Response: 200 OK (GET list) / 201 Created (POST).
+
+2. GET, PUT, PATCH, DELETE /api/catalog/categories/<slug:slug>/
+   - View: `CategoryDetailView` (generics.RetrieveUpdateDestroyAPIView)
+   - Auth: GET is Public (AllowAny); PUT/PATCH/DELETE require Platform Admin (IsPlatformAdmin).
+   - DELETE Behavior: Protected if subcategories or products reference this category (`on_delete=models.PROTECT`).
+
+3. GET /api/catalog/products/
+   - View: `PublicProductListView` (generics.ListAPIView)
+   - Auth: Public (AllowAny).
+   - Visibility Rules: Strictly filters:
+     * `status = 'approved'`
+     * `is_active = True`
+     * `seller__status = 'active'`
+     * `category__is_active = True`
+   - Query Filters:
+     * `category`: category slug
+     * `search`: text query across `name` and `description`
+     * `min_price` / `max_price`: decimal values
+     * `in_stock`: boolean ("true"/"false")
+     * `ordering`: `price`, `-price`, `created_at`, `-created_at`
+     * `page`, `page_size`: standard pagination
+   - Successful Response (200 OK): Paginated list of products with primary image and seller info.
+
+4. GET /api/catalog/products/<slug:slug>/
+   - View: `PublicProductDetailView` (generics.RetrieveAPIView)
+   - Auth: Public (AllowAny).
+   - Visibility Rules: Same public visibility filters apply. If product is unapproved, inactive,
+     or seller suspended, returns 404 Not Found.
+   - Successful Response (200 OK): Detailed product object including full image gallery and stock.
+
+5. GET, POST /api/catalog/seller/products/
+   - View: `SellerProductListCreateView` (generics.ListCreateAPIView)
+   - Auth: Bearer JWT (IsActiveSeller).
+   - GET: Paginated list of all products belonging to the authenticated seller (pending, approved, rejected).
+   - POST Request Body:
+     * `category` (UUID, required)
+     * `name` (string, required, max 200)
+     * `sku` (string, required, max 100)
+     * `description` (string, required)
+     * `price` (decimal string, required, >= 0)
+     * `stock` (integer, required, >= 0)
+     * `is_active` (boolean, optional, default True)
+   - Successful Response (201 Created): Product object with initial status `pending`.
+   - Side Effects: Records `PRODUCT_CREATED` audit event.
+
+6. GET, PUT, PATCH /api/catalog/seller/products/<slug:slug>/
+   - View: `SellerProductDetailView` (generics.RetrieveUpdateAPIView, methods: GET, PUT, PATCH, OPTIONS)
+   - Auth: Bearer JWT (IsActiveSeller). Scoped to `seller__user = request.user`.
+   - Business Rules:
+     * Sellers CANNOT modify `status` to `approved` (raises 400 Bad Request).
+     * Modifying core fields can re-trigger status to `pending` if re-review is needed.
+   - Successful Response (200 OK): Updated product object.
+   - Side Effects: Records `PRODUCT_UPDATED` audit event.
+
+7. GET /api/catalog/admin/products/
+   - View: `AdminProductListView` (generics.ListAPIView)
+   - Auth: Bearer JWT (IsPlatformAdmin).
+   - Query Parameters: `status` (`pending`, `approved`, `rejected`), `seller`, `category`, `search`, pagination.
+   - Successful Response (200 OK): Paginated list of products across all sellers and statuses.
+
+8. PATCH /api/catalog/admin/products/<slug:slug>/review/
+   - View: `AdminProductReviewView` (APIView, methods: PATCH)
+   - Auth: Bearer JWT (IsPlatformAdmin).
+   - Request Body:
+     * `action` (string, required: "approve" or "reject")
+     * `rejection_reason` (string, optional, required if action is "reject")
+   - Successful Response (200 OK): Updated product object.
+   - Error Responses:
+     * 400 Bad Request: Product is not in `pending` status, or owning seller is not active.
+     * 404 Not Found: Product slug not found.
+   - Side Effects: Emits `PRODUCT_APPROVED` or `PRODUCT_REJECTED` audit event.
+
+9. GET, POST /api/catalog/seller/products/<slug:slug>/images/
+   - View: `SellerProductImageListCreateView` (generics.ListCreateAPIView)
+   - Auth: Bearer JWT (IsActiveSeller, owning seller only).
+   - POST Request: multipart/form-data:
+     * `image` (binary file, image validated by Pillow)
+     * `is_primary` (boolean, optional, default False)
+     * `display_order` (integer, optional, default 0)
+   - Business Logic: If `is_primary=True`, automatically sets `is_primary=False` on all other
+     images for this product within an atomic transaction.
+   - Successful Response (201 Created): Created image object.
+
+10. GET, DELETE /api/catalog/seller/products/<slug:slug>/images/<uuid:pk>/
+    - View: `SellerProductImageDetailView` (generics.RetrieveDestroyAPIView, methods: GET, DELETE, OPTIONS)
+    - Auth: Bearer JWT (IsActiveSeller, owning seller only).
+    - DELETE: Deletes image record from database (204 No Content).
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Product Moderation Lifecycle:
+  1. Active seller creates product via `/api/catalog/seller/products/`. Initial status is `PENDING`.
+  2. Product is hidden from public storefront.
+  3. Platform admin inspects pending listings via `/api/catalog/admin/products/?status=pending`.
+  4. Admin approves product via `PATCH /api/catalog/admin/products/<slug>/review/`.
+  5. Product becomes discoverable in public catalog.
+- Primary Image Guarantee:
+  When an image is marked as primary, an atomic transaction clears the primary flag on all
+  existing images for that product before setting the flag on the target image. The database
+  conditional unique constraint `unique_primary_image_per_product` guarantees safety against race conditions.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- Public: Category browsing, public product listing, public product detail.
+- `IsActiveSeller`: Required for all `seller/products/*` endpoints. Sellers cannot access or
+  modify products belonging to another vendor (returns 404).
+- `IsPlatformAdmin`: Required for category mutations, admin product lists, and moderation review.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Self-Approval Prevention: DRF serializer and views explicitly block sellers from patching
+  their own product `status` to `approved` (HTTP 400).
+- Suspended Seller Visibility: Products owned by suspended sellers are instantly filtered out
+  of public catalog queries.
+- Protected Category Deletion: Attempting to delete a category that contains products fails
+  with a Django `ProtectedError` (HTTP 400), preventing orphaned products.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Emits events via `apps.audit.services.record_audit_event`:
+- `PRODUCT_CREATED` (entity: `product`, entity_id: product.id, actor: seller)
+- `PRODUCT_UPDATED` (entity: `product`, entity_id: product.id, actor: seller)
+- `PRODUCT_APPROVED` (entity: `product`, entity_id: product.id, actor: admin)
+- `PRODUCT_REJECTED` (entity: `product`, entity_id: product.id, actor: admin)
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- ForeignKey to `apps.sellers.models.SellerProfile` (`on_delete=models.PROTECT`).
+- Foreign key target for `apps.cart.CartItem` (`on_delete=models.PROTECT`).
+- Foreign key target for `apps.orders.OrderItem` (`on_delete=models.PROTECT`).
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/catalog/tests/` (9 test files):
+1. `test_models.py`: Slug auto-generation, string representations, constraints.
+2. `test_categories.py`: Category creation, hierarchical subcategories, public listing.
+3. `test_category_deletion.py`: Category deletion protection when products exist.
+4. `test_category_reactivation.py`: Category deactivation/reactivation cascades.
+5. `test_products.py`: Seller product CRUD, price and SKU validations.
+6. `test_product_filters.py`: Public product searching, category filtering, price range queries.
+7. `test_seller_product_filters.py`: Seller-side product filtering by status and inventory.
+8. `test_product_review.py`: Admin moderation (approval, rejection, note validation).
+9. `test_product_images.py`: Image upload, primary image toggling, image deletion.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Product variants (e.g. sizes, colors, weight tiers) are not supported in MVP; each product
+  record represents a single SKU.
+- Bulk product imports/exports via CSV or spreadsheet are deferred for future phases.
+- Image uploads are currently stored on the local filesystem (`MEDIA_ROOT`); production
+  deployments require cloud storage (S3/GCS).
+================================================================================

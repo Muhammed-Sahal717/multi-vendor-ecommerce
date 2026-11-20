@@ -1,23 +1,37 @@
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
-
-from .models import SellerApplication
-from .serializers import SellerApplicationSerializer
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
-
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-
-from .models import SellerApplication, SellerProfile
-from .permissions import IsPlatformAdmin, IsActiveSeller
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
+from apps.common.permissions import IsActiveSeller, IsPlatformAdmin
+from .models import SellerApplication, SellerEarning, SellerPayout, SellerProfile
+from .pagination import SellerPagination
+from .services import (
+    get_admin_seller_earnings_queryset,
+    get_seller_balance_summary,
+    record_seller_payout,
+)
 from .serializers import (
     AdminSellerApplicationSerializer,
+    AdminSellerEarningsOverviewSerializer,
+    AdminSellerPayoutCreateSerializer,
+    AdminSellerPayoutSerializer,
+    AdminSellerProfileSerializer,
+    AdminSellerStatusUpdateSerializer,
     SellerApplicationReviewSerializer,
+    SellerApplicationSerializer,
+    SellerEarningSerializer,
+    SellerEarningsSummarySerializer,
+    SellerPayoutSerializer,
     SellerProfileSerializer,
 )
 
@@ -111,6 +125,18 @@ class AdminSellerApplicationReviewView(APIView):
                     "updated_at",
                 ]
             )
+            record_audit_event(
+                actor=request.user,
+                action=(
+                    AuditAction.SELLER_APPLICATION_APPROVED
+                    if decision == SellerApplication.Status.APPROVED
+                    else AuditAction.SELLER_APPLICATION_REJECTED
+                ),
+                entity_type=AuditEntity.SELLER_APPLICATION,
+                entity_id=application.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
 
         return Response(
             AdminSellerApplicationSerializer(application).data,
@@ -125,3 +151,209 @@ class SellerProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return SellerProfile.objects.get(user=self.request.user)
+
+
+class AdminSellerListView(generics.ListAPIView):
+    serializer_class = AdminSellerProfileSerializer
+    permission_classes = [IsPlatformAdmin]
+    pagination_class = SellerPagination
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+    filterset_fields = ["status", "city", "state"]
+    search_fields = [
+        "business_name",
+        "business_email",
+        "business_phone",
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+    ]
+    ordering_fields = ["created_at", "business_name", "approved_at"]
+    ordering = ["-created_at"]
+    queryset = SellerProfile.objects.select_related("user").all()
+
+
+class AdminSellerDetailView(generics.RetrieveAPIView):
+    serializer_class = AdminSellerProfileSerializer
+    permission_classes = [IsPlatformAdmin]
+    queryset = SellerProfile.objects.select_related("user").all()
+
+
+class AdminSellerStatusUpdateView(APIView):
+    permission_classes = [IsPlatformAdmin]
+
+    def patch(self, request, pk):
+        serializer = AdminSellerStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_status = serializer.validated_data["status"]
+        reason = serializer.validated_data.get("reason", "")
+
+        with transaction.atomic():
+            try:
+                seller = SellerProfile.objects.select_for_update().select_related("user").get(pk=pk)
+            except SellerProfile.DoesNotExist:
+                return Response(
+                    {"detail": "Seller profile not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            old_status = seller.status
+
+            if old_status == new_status:
+                raise ValidationError({"status": f"Seller is already {new_status}."})
+
+            if (
+                old_status == SellerProfile.Status.INACTIVE
+                or new_status == SellerProfile.Status.INACTIVE
+            ):
+                raise ValidationError(
+                    {"status": "Transitions involving inactive status are not supported."}
+                )
+
+            valid_transition = (
+                (old_status == SellerProfile.Status.ACTIVE and new_status == SellerProfile.Status.SUSPENDED)
+                or (old_status == SellerProfile.Status.SUSPENDED and new_status == SellerProfile.Status.ACTIVE)
+            )
+
+            if not valid_transition:
+                raise ValidationError(
+                    {"status": f"Cannot transition seller status from '{old_status}' to '{new_status}'."}
+                )
+
+            seller.status = new_status
+            seller.save(update_fields=["status", "updated_at"])
+
+            record_audit_event(
+                actor=request.user,
+                action=(
+                    AuditAction.SELLER_SUSPENDED
+                    if new_status == SellerProfile.Status.SUSPENDED
+                    else AuditAction.SELLER_REACTIVATED
+                ),
+                entity_type=AuditEntity.SELLER,
+                entity_id=seller.id,
+                metadata={
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "reason": reason,
+                },
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
+
+        return Response(
+            AdminSellerProfileSerializer(seller).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SellerEarningsDashboardView(APIView):
+    permission_classes = [IsActiveSeller]
+
+    def get(self, request):
+        seller = SellerProfile.objects.get(user=request.user)
+        summary = get_seller_balance_summary(seller)
+        serializer = SellerEarningsSummarySerializer(summary)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SellerEarningsListView(generics.ListAPIView):
+    permission_classes = [IsActiveSeller]
+    serializer_class = SellerEarningSerializer
+    pagination_class = SellerPagination
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at", "gross_amount", "net_amount"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        return SellerEarning.objects.filter(
+            seller__user=self.request.user
+        ).select_related("order_item__order")
+
+
+class SellerPayoutListView(generics.ListAPIView):
+    permission_classes = [IsActiveSeller]
+    serializer_class = SellerPayoutSerializer
+    pagination_class = SellerPagination
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["payout_date", "amount", "created_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        return SellerPayout.objects.filter(
+            seller__user=self.request.user
+        ).select_related("seller", "created_by")
+
+
+class AdminSellerEarningsOverviewView(generics.ListAPIView):
+    permission_classes = [IsPlatformAdmin]
+    serializer_class = AdminSellerEarningsOverviewSerializer
+    pagination_class = SellerPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ["status"]
+    search_fields = ["business_name", "business_email", "user__email"]
+    ordering_fields = [
+        "total_gross_earnings",
+        "total_net_earnings",
+        "already_paid",
+        "pending_payout_balance",
+        "business_name",
+    ]
+    ordering = ["-total_net_earnings"]
+
+    def get_queryset(self):
+        return get_admin_seller_earnings_queryset()
+
+
+class AdminSellerEarningsListView(generics.ListAPIView):
+    permission_classes = [IsPlatformAdmin]
+    serializer_class = SellerEarningSerializer
+    pagination_class = SellerPagination
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at", "gross_amount", "net_amount"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        seller = get_object_or_404(SellerProfile, pk=self.kwargs["pk"])
+        return SellerEarning.objects.filter(seller=seller).select_related("order_item__order")
+
+
+class AdminSellerPayoutListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsPlatformAdmin]
+    pagination_class = SellerPagination
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["payout_date", "amount", "created_at"]
+    ordering = ["-created_at"]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AdminSellerPayoutCreateSerializer
+        return AdminSellerPayoutSerializer
+
+    def get_queryset(self):
+        seller = get_object_or_404(SellerProfile, pk=self.kwargs["pk"])
+        return SellerPayout.objects.filter(seller=seller).select_related("seller", "created_by")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        payout = record_seller_payout(
+            seller_id=self.kwargs["pk"],
+            amount=serializer.validated_data["amount"],
+            payout_date=serializer.validated_data["payout_date"],
+            transaction_reference=serializer.validated_data["transaction_reference"],
+            admin_user=request.user,
+            notes=serializer.validated_data.get("notes", ""),
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+
+        return Response(
+            AdminSellerPayoutSerializer(payout).data,
+            status=status.HTTP_201_CREATED,
+        )

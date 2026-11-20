@@ -3,6 +3,8 @@ from rest_framework import serializers
 from django.db import transaction
 
 from .models import User, CustomerProfile, Address
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.services import record_audit_event
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -53,10 +55,24 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("confirm_password")
 
-        return User.objects.create_user(
-            role=User.Role.CUSTOMER,
-            **validated_data,
-        )
+        request = self.context.get("request")
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                role=User.Role.CUSTOMER,
+                **validated_data,
+            )
+
+            record_audit_event(
+                actor=user,
+                action=AuditAction.USER_REGISTERED,
+                entity_type=AuditEntity.USER,
+                entity_id=user.id,
+                ip_address=request.META.get("REMOTE_ADDR") if request else None,
+                user_agent=request.META.get("HTTP_USER_AGENT", "") if request else "",
+            )
+
+        return user
 
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
@@ -85,15 +101,27 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
+        request = self.context.get("request")
 
-        for field, value in user_data.items():
-            setattr(instance.user, field, value)
+        with transaction.atomic():
+            for field, value in user_data.items():
+                setattr(instance.user, field, value)
 
-        if user_data:
-            instance.user.save()
+            if user_data:
+                instance.user.save()
 
-        return super().update(instance, validated_data)
+            profile = super().update(instance, validated_data)
 
+            record_audit_event(
+                actor=request.user if request else instance.user,
+                action=AuditAction.PROFILE_UPDATED,
+                entity_type=AuditEntity.USER,
+                entity_id=instance.user.id,
+                ip_address=request.META.get("REMOTE_ADDR") if request else None,
+                user_agent=request.META.get("HTTP_USER_AGENT", "") if request else "",
+            )
+
+        return profile
 
 class ProfileImageSerializer(serializers.ModelSerializer):
     profile_image = serializers.ImageField(
@@ -159,3 +187,78 @@ class AddressSerializer(serializers.ModelSerializer):
                 ).update(is_default=False)
 
             return super().update(instance, validated_data)
+
+
+class AdminCustomerAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = [
+            "id",
+            "full_name",
+            "mobile",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "is_default",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerListSerializer(serializers.ModelSerializer):
+    mobile = serializers.CharField(
+        source="customer_profile.mobile",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "mobile",
+            "is_active",
+            "date_joined",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerDetailSerializer(serializers.ModelSerializer):
+    mobile = serializers.CharField(
+        source="customer_profile.mobile",
+        read_only=True,
+        default="",
+    )
+    addresses = AdminCustomerAddressSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "mobile",
+            "is_active",
+            "date_joined",
+            "last_login",
+            "addresses",
+        ]
+        read_only_fields = fields
+
+
+class AdminCustomerStatusUpdateSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField(required=True)
+
+    def validate(self, attrs):
+        if not hasattr(self, "initial_data") or "is_active" not in self.initial_data:
+            raise serializers.ValidationError(
+                {"is_active": "This field is required."}
+            )
+        return attrs

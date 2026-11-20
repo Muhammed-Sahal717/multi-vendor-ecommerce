@@ -7,6 +7,8 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
 from apps.sellers.models import SellerProfile
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 
 class ProductAPITests(APITestCase):
@@ -266,3 +268,50 @@ class ProductAPITests(APITestCase):
 
         self.product.refresh_from_db()
         self.assertEqual(self.product.status, Product.Status.PENDING)
+
+    def test_product_creation_creates_audit_event(self):
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.post(
+            self.seller_url,
+            {
+                "category": str(self.category.id),
+                "name": "Wall Tile",
+                "sku": "TILE-AUDIT-001",
+                "description": "Premium wall tile",
+                "price": "150.00",
+                "stock": 30,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        product = Product.objects.get(sku="TILE-AUDIT-001")
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PRODUCT_CREATED,
+            entity_type=AuditEntity.PRODUCT,
+            entity_id=product.id,
+        )
+
+        self.assertEqual(event.actor, self.seller_user)
+
+    def test_product_update_creates_audit_event(self):
+        self.client.force_authenticate(user=self.seller_user)
+
+        response = self.client.patch(
+            f"{self.seller_url}{self.product.slug}/",
+            {"stock": 75},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = AuditEvent.objects.get(
+            action=AuditAction.PRODUCT_UPDATED,
+            entity_type=AuditEntity.PRODUCT,
+            entity_id=self.product.id,
+        )
+
+        self.assertEqual(event.actor, self.seller_user)

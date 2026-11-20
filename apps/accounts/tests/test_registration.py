@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import CustomerProfile, User
+from apps.audit.constants import AuditAction, AuditEntity
+from apps.audit.models import AuditEvent
 
 
 class RegistrationAPITests(APITestCase):
@@ -71,3 +73,21 @@ class RegistrationAPITests(APITestCase):
         self.assertTrue(CustomerProfile.objects.filter(user=user).exists())
 
         self.assertEqual(user.role, User.Role.CUSTOMER)
+    def test_successful_registration_creates_audit_event(self):
+        response = self.client.post(
+            self.url,
+            self.valid_payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(email="test@example.com")
+
+        audit_event = AuditEvent.objects.get(
+            action=AuditAction.USER_REGISTERED,
+            entity_type=AuditEntity.USER,
+            entity_id=user.id,
+        )
+
+        self.assertEqual(audit_event.actor, user)

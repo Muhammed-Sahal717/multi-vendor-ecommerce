@@ -2,8 +2,18 @@ from django.urls import path
 from .views import (
     AdminSellerApplicationListView,
     AdminSellerApplicationReviewView,
+    AdminSellerDetailView,
+    AdminSellerEarningsListView,
+    AdminSellerEarningsOverviewView,
+    AdminSellerListView,
+    AdminSellerPayoutListCreateView,
+    AdminSellerStatusUpdateView,
+    SellerApplicationCreateView,
+    SellerEarningsDashboardView,
+    SellerEarningsListView,
+    SellerPayoutListView,
+    SellerProfileView,
 )
-from .views import SellerApplicationCreateView, SellerProfileView
 
 urlpatterns = [
     path(
@@ -22,8 +32,53 @@ urlpatterns = [
         name="admin-seller-application-review",
     ),
     path(
+        "admin/sellers/",
+        AdminSellerListView.as_view(),
+        name="admin-seller-list",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/",
+        AdminSellerDetailView.as_view(),
+        name="admin-seller-detail",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/status/",
+        AdminSellerStatusUpdateView.as_view(),
+        name="admin-seller-status-update",
+    ),
+    path(
+        "admin/earnings/",
+        AdminSellerEarningsOverviewView.as_view(),
+        name="admin-seller-earnings-overview",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/earnings/",
+        AdminSellerEarningsListView.as_view(),
+        name="admin-seller-earnings-list",
+    ),
+    path(
+        "admin/sellers/<uuid:pk>/payouts/",
+        AdminSellerPayoutListCreateView.as_view(),
+        name="admin-seller-payout-list-create",
+    ),
+    path(
         "profile/",
         SellerProfileView.as_view(),
         name="seller-profile",
+    ),
+    path(
+        "earnings/dashboard/",
+        SellerEarningsDashboardView.as_view(),
+        name="seller-earnings-dashboard",
+    ),
+    path(
+        "earnings/",
+        SellerEarningsListView.as_view(),
+        name="seller-earnings-list",
+    ),
+    path(
+        "payouts/",
+        SellerPayoutListView.as_view(),
+        name="seller-payout-list",
     ),
 ]

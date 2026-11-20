@@ -1,0 +1,163 @@
+================================================================================
+GALLA BACKEND - MODULE DOCUMENTATION: CART
+================================================================================
+
+A. MODULE OVERVIEW
+------------------
+The `cart` app provides customer shopping cart management for the Galla marketplace.
+Key capabilities:
+- Persistent server-side cart associated 1:1 with each authenticated customer.
+- Role-gated access restricted strictly to customer users via `IsCustomer` permission.
+- Real-time cart calculations: `total_items` (total quantity) and `total_price` (cart total).
+- Duplicate product prevention: adding a product that is already in the cart fails with
+  a validation error prompting the client to update its quantity instead via PATCH.
+- Live product availability and stock validation during item addition and updates.
+- Multi-seller product coexistence within the same customer cart.
+
+
+B. MODELS & DATA STRUCTURES
+----------------------------
+1. Cart
+   - Table: `cart_carts`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `user`: OneToOneField(User, on_delete=models.CASCADE, related_name="cart")
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+
+2. CartItem
+   - Table: `cart_items`
+   - Primary Key: `id` (UUIDField, default=uuid.uuid4, editable=False)
+   - Fields:
+     * `cart`: ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
+     * `product`: ForeignKey("catalog.Product", on_delete=models.PROTECT, related_name="cart_items")
+     * `quantity`: PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+     * `created_at`: DateTimeField(auto_now_add=True)
+     * `updated_at`: DateTimeField(auto_now=True)
+   - Constraints & Indexes:
+     * `ordering = ["-created_at"]`
+     * `UniqueConstraint(fields=["cart", "product"], name="unique_product_per_cart")`
+     * `CheckConstraint(condition=Q(quantity__gt=0), name="cart_item_quantity_positive")`
+
+
+C. API ENDPOINTS
+----------------
+All routes mounted at `/api/cart/` via `config/urls.py`.
+
+1. GET /api/cart/
+   - View: `CartDetailView` (generics.RetrieveAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsCustomer]`: user must be authenticated with role `customer`).
+   - Object-level Resolution: Lazily retrieves or creates cart for `request.user`.
+   - Successful Response (200 OK):
+     {
+       "id": "<cart_uuid>",
+       "items": [
+         {
+           "id": "<item_uuid>",
+           "product": "<product_uuid>",
+           "product_name": "...",
+           "product_slug": "...",
+           "product_price": "...",
+           "quantity": 2,
+           "product_stock": 10,
+           "is_available": true,
+           "subtotal": "...",
+           "created_at": "...",
+           "updated_at": "..."
+         }
+       ],
+       "total_items": 2,
+       "total_price": 500.00,
+       "created_at": "...",
+       "updated_at": "..."
+     }
+   - Error Responses:
+     * 401 Unauthorized: If unauthenticated.
+     * 403 Forbidden: If authenticated user role is not `customer` (e.g. seller or admin).
+
+2. POST /api/cart/items/
+   - View: `CartItemCreateView` (generics.CreateAPIView)
+   - Auth: Bearer JWT (`permission_classes = [IsCustomer]`).
+   - Request Body:
+     * `product` (UUID, required) - ID of the product to add.
+     * `quantity` (integer, optional, default 1, must be >= 1)
+   - Validation Rules:
+     * Product must exist, be `status='approved'`, `is_active=True`, category active, and seller active.
+     * Requested `quantity` cannot exceed `product.stock`.
+     * If product is already in the customer's cart, raises 400 Bad Request:
+       `{"product": "This product is already in your cart. Update its quantity instead."}`.
+   - Successful Response (201 Created): Serialized `CartItem` representation.
+   - Error Responses:
+     * 400 Bad Request: Product unavailable, quantity > stock, or product already in cart.
+
+3. PATCH, DELETE /api/cart/items/<uuid:pk>/
+   - View: `CartItemDetailView` (generics.GenericAPIView with UpdateModelMixin, DestroyModelMixin; methods: PATCH, DELETE, OPTIONS).
+     Note: GET and PUT methods are NOT supported on individual cart items.
+   - Auth: Bearer JWT (`permission_classes = [IsCustomer]`).
+   - Object-level Scoping: `CartItem.objects.filter(cart__user=request.user)`.
+   - PATCH Request Body:
+     * `quantity` (integer, required, >= 1)
+     Note: The `product` field cannot be modified via PATCH (raises 400).
+   - Validation Rules: `quantity` cannot exceed current `product.stock`.
+   - Successful Response:
+     * PATCH: 200 OK with updated `CartItem` representation.
+     * DELETE: 204 No Content.
+   - Error Responses:
+     * 400 Bad Request: Requested quantity exceeds stock.
+     * 404 Not Found: Item does not exist or belongs to another customer's cart.
+
+
+D. BUSINESS LOGIC & WORKFLOWS
+-----------------------------
+- Cart Initialization: Lazily created on first request via `Cart.objects.get_or_create(user=request.user)`.
+- Stock Verification:
+  Both item creation and quantity updates validate live inventory (`product.stock >= quantity`).
+- Multi-Seller Support:
+  Items from multiple distinct sellers can reside in the cart concurrently. Splitting and routing
+  into discrete seller fulfillment items occurs downstream at checkout.
+
+
+E. PERMISSIONS & ACCESS CONTROL
+-------------------------------
+- `IsCustomer`: Only users with `role == 'customer'` can interact with the shopping cart.
+  Sellers and platform administrators are denied cart access (HTTP 403 Forbidden).
+- Object Isolation: All queries are scoped strictly to `cart__user = request.user`.
+  Customers cannot view, modify, or delete another customer's cart items.
+
+
+F. EDGE CASES & ERROR HANDLING
+------------------------------
+- Adding Duplicate Product: Fails validation with HTTP 400, instructing the client to use PATCH.
+- Insufficient Stock: Returns HTTP 400 with message specifying available quantity limit.
+- Product Becomes Inactive: `is_available` serializer method returns `false` if product status,
+  product active flag, category active flag, or seller status changes, alerting the buyer.
+
+
+G. AUDIT LOGGING INTEGRATION
+----------------------------
+Cart actions are high-frequency ephemeral operations and do not generate audit events.
+Audit logging occurs downstream when the cart is checked out (`ORDER_CREATED`).
+
+
+H. RELATIONSHIPS & INTER-APP DEPENDENCIES
+-----------------------------------------
+- OneToOne with `apps.accounts.models.User` (`on_delete=models.CASCADE`).
+- ForeignKey to `apps.catalog.models.Product` (`on_delete=models.PROTECT`).
+- Consumed by `apps.orders.services.create_order` during checkout.
+
+
+I. TEST COVERAGE SUMMARY
+------------------------
+Directory: `apps/cart/tests/` (2 test files):
+1. `test_cart.py`: Cart retrieval, empty cart initialization, multi-item calculations.
+2. `test_cart_items.py`: Adding items, stock limit validation, duplicate product rejection,
+   PATCH quantity updates, DELETE removal, and cross-customer cart isolation.
+
+
+J. KNOWN LIMITATIONS & TECHNICAL DEBT
+-------------------------------------
+- Anonymous / guest cart sessions are not supported in MVP; authentication as a customer is required.
+- Cart abandon notifications and persistent wishlist features are deferred.
+- No automatic stock reservation or TTL holds occur while items sit in the cart; stock is reserved
+  only upon successful checkout.
+================================================================================
