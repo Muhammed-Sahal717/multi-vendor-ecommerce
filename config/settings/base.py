@@ -204,12 +204,15 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-raw_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in raw_cors_origins.split(",") if origin.strip()
-] or [
+LOCAL_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+raw_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
+custom_cors_origins = [
+    origin.strip() for origin in raw_cors_origins.split(",") if origin.strip()
+]
+# Always allow localhost origins plus any custom domains provided in environment
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(LOCAL_CORS_ORIGINS + custom_cors_origins))
