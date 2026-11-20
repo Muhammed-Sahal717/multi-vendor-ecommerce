@@ -31,6 +31,11 @@ export const getMediaUrl = (url) => {
 export const getProductImageUrl = (product) => {
   if (!product) return null;
 
+  // If already a URL string
+  if (typeof product === 'string') {
+    return getMediaUrl(product);
+  }
+
   let rawUrl = null;
 
   // 1. primary_image field (can be string or object)
@@ -45,7 +50,12 @@ export const getProductImageUrl = (product) => {
     }
   }
 
-  // 2. images array: find explicit is_primary or fallback to first image
+  // 2. nested product object if product is a cart item or order item
+  if (!rawUrl && product.product && typeof product.product === 'object') {
+    return getProductImageUrl(product.product);
+  }
+
+  // 3. images array: find explicit is_primary or fallback to first image
   if (!rawUrl && Array.isArray(product.images) && product.images.length > 0) {
     const primaryImg =
       product.images.find((img) => img && (img.is_primary || img.isPrimary)) ||
@@ -58,9 +68,13 @@ export const getProductImageUrl = (product) => {
     }
   }
 
-  // 3. direct image or thumbnail fields
+  // 4. direct image, thumbnail, or product_image fields
   if (!rawUrl) {
-    rawUrl = product.image || product.thumbnail || product.cover_image;
+    rawUrl =
+      product.image ||
+      product.thumbnail ||
+      product.cover_image ||
+      product.product_image;
   }
 
   return getMediaUrl(rawUrl);

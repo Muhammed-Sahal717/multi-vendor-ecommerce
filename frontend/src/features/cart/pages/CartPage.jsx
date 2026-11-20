@@ -215,19 +215,19 @@ export const CartPage = () => {
 
   // 6. Active Cart View
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
       {/* Header */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
               Shopping Cart
             </h1>
-            <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+            <span className="inline-flex items-center rounded-full border border-border/80 bg-card px-3 py-0.5 text-xs font-bold text-foreground shadow-2xs">
               {totalItems} {totalItems === 1 ? 'item' : 'items'}
             </span>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
             Review your selected artisan products before proceeding to secure checkout.
           </p>
         </div>
@@ -259,10 +259,10 @@ export const CartPage = () => {
           ))}
 
           {/* Guarantee info card */}
-          <div className="mt-6 rounded-2xl border border-border bg-card/60 p-4 sm:p-5 flex items-center gap-3 text-xs text-muted-foreground">
-            <ShieldCheck size={20} className="text-primary shrink-0" />
-            <p>
-              All orders are protected by our <span className="font-semibold text-foreground">Buyer Protection Program</span>. If an item arrives damaged or not as described, return it within 7 days for a full refund.
+          <div className="mt-6 rounded-3xl border border-border/60 bg-muted/20 p-4 sm:p-5 flex items-center gap-3.5 text-xs text-muted-foreground">
+            <ShieldCheck size={20} className="text-primary shrink-0 stroke-[2]" />
+            <p className="leading-relaxed">
+              All orders are protected by our <span className="font-bold text-foreground">Buyer Protection Program</span>. If an item arrives damaged or not as described, return it within 7 days for a hassle-free refund.
             </p>
           </div>
         </div>
@@ -280,10 +280,12 @@ export const CartPage = () => {
 
       {/* Bottom Cross-Sell / Recommendations */}
       {recommendedProducts.length > 0 && (
-        <div className="mt-20 border-t border-border pt-12">
+        <div className="mt-16 border-t border-border/60 pt-10">
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-foreground">You Might Also Like</h2>
+              <h2 className="text-xl font-black tracking-tight text-foreground font-heading">
+                You Might Also Like
+              </h2>
               <p className="text-xs text-muted-foreground">Popular recommendations from verified sellers</p>
             </div>
             <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary">
@@ -291,7 +293,7 @@ export const CartPage = () => {
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-5">
             {recommendedProducts.slice(0, 4).map((product, index) => (
               <ProductCard key={product.id} product={product} index={index} />
             ))}

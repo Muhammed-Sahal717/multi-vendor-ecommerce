@@ -58,7 +58,7 @@ export const CheckoutOrderSummary = ({
         {showItemsList && (
           <div className="max-h-56 space-y-2.5 overflow-y-auto pr-1">
             {items.map((item) => {
-              const imgUrl = getProductImageUrl(item.primary_image || item.image);
+              const imgUrl = getProductImageUrl(item) || getProductImageUrl(item?.primary_image || item?.image);
               return (
                 <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-2 text-xs">
                   <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, AlertTriangle, AlertCircle, Package } from 'lucide-react';
 import { Button } from '../../../components/ui/button.jsx';
-import { Badge } from '../../../components/ui/badge.jsx';
 import { Card } from '../../../components/ui/card.jsx';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 import { getProductImageUrl } from '../../../lib/utils.js';
@@ -16,7 +15,10 @@ export const CartItem = ({
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  const imageUrl = getProductImageUrl(item.primary_image || item.image);
+  const imageUrl =
+    getProductImageUrl(item) ||
+    getProductImageUrl(item?.primary_image) ||
+    getProductImageUrl(item?.image);
   const maxStock = item.product_stock ?? 999;
   const isOutOfStock = !item.is_available || maxStock === 0;
   const exceedsStock = item.quantity > maxStock;
@@ -35,70 +37,73 @@ export const CartItem = ({
   };
 
   return (
-    <Card className={`overflow-hidden p-4 sm:p-5 transition-all border ${
-      !item.is_available || exceedsStock
-        ? 'border-destructive/30 bg-destructive/5'
-        : 'border-border bg-card hover:border-primary/20'
-    }`}>
+    <Card
+      className={`overflow-hidden rounded-3xl p-4 sm:p-5 transition-all border shadow-2xs ${
+        !item.is_available || exceedsStock
+          ? 'border-destructive/30 bg-destructive/5'
+          : 'border-border/80 bg-card hover:border-primary/30'
+      }`}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Left: Product Thumbnail & Info */}
         <div className="flex items-start gap-4 flex-1 min-w-0">
-          {/* Thumbnail */}
+          {/* Thumbnail Pod with Crisp Frame */}
           <Link
             to={item.product_slug ? `/products/${item.product_slug}` : '#'}
-            className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted/40 transition-transform hover:scale-105 sm:h-24 sm:w-24"
+            className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-border/80 bg-white dark:bg-card transition-transform hover:scale-102 sm:h-22 sm:w-22 p-1.5 shadow-2xs"
           >
             {imageUrl && !imageError ? (
               <img
                 src={imageUrl}
                 alt={item.product_name}
                 onError={() => setImageError(true)}
-                className="h-full w-full object-cover object-center transition-transform group-hover:scale-105"
+                className="h-full w-full object-contain object-center rounded-xl transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-muted text-muted-foreground">
-                <Package size={24} />
+              <div className="flex h-full w-full items-center justify-center rounded-xl bg-muted/30 text-muted-foreground/60">
+                <Package size={22} className="stroke-[1.5]" />
               </div>
             )}
           </Link>
 
           {/* Details */}
-          <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex-1 min-w-0 space-y-1.5">
             <Link
               to={item.product_slug ? `/products/${item.product_slug}` : '#'}
-              className="line-clamp-2 text-sm font-semibold text-foreground hover:text-primary transition-colors sm:text-base"
+              className="line-clamp-2 text-xs sm:text-sm font-bold text-foreground hover:text-primary transition-colors"
             >
               {item.product_name}
             </Link>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Unit price:</span>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Price:</span>
               <PriceDisplay
                 price={item.product_price}
-                size="sm"
-                className="font-medium text-foreground"
+                priceClassName="font-semibold text-foreground text-xs"
               />
             </div>
 
-            {/* Stock & Availability Warnings */}
-            <div className="pt-1 flex flex-wrap items-center gap-1.5">
+            {/* Stock & Availability Warnings (Clean & minimal, no loud chunky badge) */}
+            <div className="pt-0.5">
               {!item.is_available ? (
-                <Badge variant="destructive" className="gap-1 text-[11px] font-semibold py-0.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive">
                   <AlertCircle size={12} />
-                  Unavailable - Remove to proceed
-                </Badge>
+                  Unavailable • Please remove to checkout
+                </span>
               ) : exceedsStock ? (
-                <Badge variant="destructive" className="gap-1 text-[11px] font-semibold py-0.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive">
                   <AlertTriangle size={12} />
                   Only {maxStock} left in stock
-                </Badge>
+                </span>
               ) : isLowStock ? (
-                <span className="text-[11px] font-medium text-chart-5 flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-500">
                   <AlertTriangle size={12} />
-                  Only {maxStock} left!
+                  Only {maxStock} left
                 </span>
               ) : (
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   In Stock
                 </span>
               )}
@@ -107,35 +112,35 @@ export const CartItem = ({
         </div>
 
         {/* Right: Quantity Controls, Subtotal, Remove */}
-        <div className="flex items-center justify-between sm:justify-end gap-6 border-t border-border/60 pt-3 sm:border-0 sm:pt-0">
-          {/* Quantity Controls */}
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between sm:justify-end gap-5 sm:gap-6 border-t border-border/60 pt-3 sm:border-0 sm:pt-0">
+          {/* Quantity Stepper */}
+          <div className="inline-flex items-center rounded-xl border border-border/80 bg-background/50 p-0.5 shadow-2xs">
             <Button
               type="button"
-              variant="outline"
-              size="icon"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleDecrement}
               disabled={item.quantity <= 1 || isUpdating || isOutOfStock}
-              className="h-8 w-8 rounded-lg border-border text-foreground hover:bg-muted disabled:opacity-40"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
               aria-label="Decrease quantity"
             >
-              <Minus size={13} />
+              <Minus size={12} />
             </Button>
 
-            <div className="flex h-8 w-11 items-center justify-center rounded-lg border border-border bg-background text-xs font-bold text-foreground">
+            <div className="w-8 text-center text-xs font-bold text-foreground">
               {item.quantity}
             </div>
 
             <Button
               type="button"
-              variant="outline"
-              size="icon"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleIncrement}
               disabled={item.quantity >= maxStock || isUpdating || isOutOfStock}
-              className="h-8 w-8 rounded-lg border-border text-foreground hover:bg-muted disabled:opacity-40"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
               aria-label="Increase quantity"
             >
-              <Plus size={13} />
+              <Plus size={12} />
             </Button>
           </div>
 
@@ -146,8 +151,7 @@ export const CartItem = ({
             </span>
             <PriceDisplay
               price={item.subtotal || (parseFloat(item.product_price) * item.quantity)}
-              size="md"
-              className="font-bold text-primary"
+              priceClassName="font-extrabold text-foreground text-sm sm:text-base"
             />
           </div>
 
@@ -155,14 +159,14 @@ export const CartItem = ({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-xs"
             onClick={() => onRemove(item.id)}
             disabled={isRemoving}
-            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors cursor-pointer"
             title="Remove item"
             aria-label={`Remove ${item.product_name} from cart`}
           >
-            <Trash2 size={16} />
+            <Trash2 size={15} />
           </Button>
         </div>
       </div>

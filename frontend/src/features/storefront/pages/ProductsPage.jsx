@@ -6,10 +6,9 @@ import {
   X,
   ArrowUpDown,
   Search,
-  Filter,
-  Layers,
   ChevronDown,
   Check,
+  RotateCcw,
 } from 'lucide-react';
 import { catalogService } from '../services/catalogService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
@@ -20,7 +19,6 @@ import { ErrorState } from '../../../components/shared/ErrorState.jsx';
 import { EmptyState } from '../../../components/shared/EmptyState.jsx';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
-import { Badge } from '../../../components/ui/badge.jsx';
 import { Card } from '../../../components/ui/card.jsx';
 import {
   DropdownMenu,
@@ -142,169 +140,211 @@ export const ProductsPage = () => {
   // Find active category label
   const activeCategoryObj = categories.find((c) => c.slug === selectedCategory);
   const activeCategoryName = activeCategoryObj?.name || selectedCategory;
+  const hasActiveFilters = Boolean(selectedCategory || searchQuery || minPriceParam || maxPriceParam);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Breadcrumbs & Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
-            Home
-          </Link>
-          <span>/</span>
-          <span className="text-foreground font-semibold">Products</span>
-          {activeCategoryName && (
-            <>
-              <span>/</span>
-              <span className="text-primary font-bold">{activeCategoryName}</span>
-            </>
-          )}
-        </div>
-
-        <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
-              {activeCategoryName ? activeCategoryName : 'Explore Catalog'}
-            </h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Showing {products.length} of {totalCount} verified products
-            </p>
-          </div>
-
-          {/* Top Sort & Mobile Filter Toggle */}
-          <div className="flex items-center gap-2.5">
-            {/* Mobile Filter Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMobileFilterOpen((prev) => !prev)}
-              className="h-9 gap-1.5 lg:hidden text-xs font-semibold"
-            >
-              <SlidersHorizontal size={14} />
-              <span>Filters</span>
-            </Button>
-
-            {/* Sort Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/40 focus:outline-none transition-all cursor-pointer">
-                <ArrowUpDown size={13} className="text-muted-foreground" />
-                <span>{(SORT_OPTIONS.find((opt) => opt.value === selectedOrdering) || SORT_OPTIONS[0]).label}</span>
-                <ChevronDown size={14} className="text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-xl border border-border bg-card shadow-lg">
-                <DropdownMenuGroup>
-                  {SORT_OPTIONS.map((opt) => {
-                    const isSelected = selectedOrdering === opt.value;
-                    return (
-                      <DropdownMenuItem
-                        key={opt.value}
-                        onClick={() => updateFilters({ ordering: opt.value })}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        <span>{opt.label}</span>
-                        {isSelected && <Check size={14} className="text-primary stroke-[2.5]" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Active Filter Chips */}
-        {(selectedCategory || searchQuery || minPriceParam || maxPriceParam) && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 pt-2 border-t border-border">
-            <span className="text-xs font-semibold text-muted-foreground">Active:</span>
-
-            {selectedCategory && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-primary/25 bg-primary/10 text-primary text-xs pl-2.5 pr-1.5 py-1"
-              >
-                <span>Category: {activeCategoryName}</span>
-                <button
-                  type="button"
-                  onClick={() => updateFilters({ category: '' })}
-                  className="rounded-full hover:bg-primary/20 p-0.5"
-                >
-                  <X size={12} />
-                </button>
-              </Badge>
-            )}
-
-            {searchQuery && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-chart-2/30 bg-chart-2/15 text-chart-2 text-xs pl-2.5 pr-1.5 py-1"
-              >
-                <span>Search: &ldquo;{searchQuery}&rdquo;</span>
-                <button
-                  type="button"
-                  onClick={() => updateFilters({ search: '' })}
-                  className="rounded-full hover:bg-chart-2/25 p-0.5"
-                >
-                  <X size={12} />
-                </button>
-              </Badge>
-            )}
-
-            {(minPriceParam || maxPriceParam) && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-chart-5/30 bg-chart-5/15 text-chart-5 text-xs pl-2.5 pr-1.5 py-1"
-              >
-                <span>
-                  Price: ₹{minPriceParam || '0'} - ₹{maxPriceParam || '∞'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMinPriceInput('');
-                    setMaxPriceInput('');
-                    updateFilters({ min_price: '', max_price: '' });
-                  }}
-                  className="rounded-full hover:bg-chart-5/25 p-0.5"
-                >
-                  <X size={12} />
-                </button>
-              </Badge>
-            )}
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearFilters}
-              className="h-6 px-2 text-[11px] font-semibold text-muted-foreground hover:text-destructive"
-            >
-              Clear All
-            </Button>
-          </div>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      {/* Breadcrumbs Navigation */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
+          Home
+        </Link>
+        <span>/</span>
+        <span className="text-foreground font-semibold">Products</span>
+        {activeCategoryName && (
+          <>
+            <span>/</span>
+            <span className="text-primary font-bold">{activeCategoryName}</span>
+          </>
         )}
+      </nav>
+
+      {/* Page Header with Minimal Clean Title and Action Controls */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end border-b border-border/60 pb-6">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
+            {activeCategoryName ? activeCategoryName : 'Explore Catalog'}
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+            Showing {products.length} of {totalCount} verified items
+          </p>
+        </div>
+
+        {/* Top Sort & Mobile Filter Toggle */}
+        <div className="flex items-center gap-2.5">
+          {/* Mobile Filter Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setMobileFilterOpen((prev) => !prev)}
+            className="h-9 gap-1.5 rounded-full border-border/80 px-3.5 text-xs font-semibold lg:hidden cursor-pointer"
+          >
+            <SlidersHorizontal size={14} />
+            <span>Filters {hasActiveFilters && '•'}</span>
+          </Button>
+
+          {/* Sort Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border/80 bg-card px-4 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/30 focus:outline-none transition-all cursor-pointer">
+              <ArrowUpDown size={13} className="text-muted-foreground" />
+              <span>{(SORT_OPTIONS.find((opt) => opt.value === selectedOrdering) || SORT_OPTIONS[0]).label}</span>
+              <ChevronDown size={13} className="text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-2xl border border-border/80 bg-card shadow-lg">
+              <DropdownMenuGroup>
+                {SORT_OPTIONS.map((opt) => {
+                  const isSelected = selectedOrdering === opt.value;
+                  return (
+                    <DropdownMenuItem
+                      key={opt.value}
+                      onClick={() => updateFilters({ ordering: opt.value })}
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
+                        isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && <Check size={14} className="text-primary stroke-[2.5]" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* Main Grid: Sidebar + Product Listings */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-        {/* Desktop Filter Sidebar (and Mobile collapsible) */}
-        <aside
-          className={`space-y-6 lg:block ${
-            mobileFilterOpen ? 'block' : 'hidden'
+      {/* Horizontal Category Quick-Pills for One-Tap Category Navigation */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => updateFilters({ category: '' })}
+          className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            !selectedCategory
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
           }`}
         >
-          {/* Categories Filter Card */}
-          <Card className="rounded-2xl border-border bg-card p-4 shadow-2xs">
-            <div className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
-              <Layers size={14} className="text-primary" />
-              <span>Categories</span>
-            </div>
+          All
+        </button>
+        {categories.map((cat) => {
+          const isSelected = selectedCategory === cat.slug;
+          return (
+            <button
+              key={cat.id || cat.slug}
+              type="button"
+              onClick={() => updateFilters({ category: cat.slug })}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+              }`}
+            >
+              {cat.name}
+            </button>
+          );
+        })}
+      </div>
 
-            <div className="space-y-1">
+      {/* Active Filter Chips (Clean & Minimal without loud multi-colored badges) */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs font-semibold text-muted-foreground">Filters:</span>
+
+          {selectedCategory && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+              <span>{activeCategoryName}</span>
               <button
                 type="button"
                 onClick={() => updateFilters({ category: '' })}
-                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className="rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Remove category filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+
+          {searchQuery && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+              <span>&ldquo;{searchQuery}&rdquo;</span>
+              <button
+                type="button"
+                onClick={() => updateFilters({ search: '' })}
+                className="rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Remove search filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+
+          {(minPriceParam || maxPriceParam) && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+              <span>₹{minPriceParam || '0'} – ₹{maxPriceParam || '∞'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMinPriceInput('');
+                  setMaxPriceInput('');
+                  updateFilters({ min_price: '', max_price: '' });
+                }}
+                className="rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Remove price filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearFilters}
+            className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-destructive gap-1"
+          >
+            <RotateCcw size={12} />
+            <span>Reset</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Main Grid: Sidebar + Product Listings */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-4 pt-2">
+        {/* Desktop Filter Sidebar & Mobile Drawer */}
+        <aside
+          className={`space-y-6 lg:block ${
+            mobileFilterOpen
+              ? 'fixed inset-0 z-50 overflow-y-auto bg-background/80 backdrop-blur-md p-6 lg:static lg:p-0 lg:bg-transparent lg:backdrop-blur-none'
+              : 'hidden'
+          }`}
+        >
+          {/* Mobile drawer header */}
+          <div className="flex items-center justify-between pb-4 border-b border-border lg:hidden">
+            <h3 className="text-base font-bold text-foreground">Filters</h3>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setMobileFilterOpen(false)}
+              className="rounded-full"
+            >
+              <X size={18} />
+            </Button>
+          </div>
+
+          {/* Categories Filter Card */}
+          <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-2xs">
+            <span className="block mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
+              Categories
+            </span>
+
+            <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+              <button
+                type="button"
+                onClick={() => {
+                  updateFilters({ category: '' });
+                  setMobileFilterOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                   !selectedCategory
                     ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                     : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -319,8 +359,11 @@ export const ProductsPage = () => {
                   <button
                     key={cat.id || cat.slug}
                     type="button"
-                    onClick={() => updateFilters({ category: cat.slug })}
-                    className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    onClick={() => {
+                      updateFilters({ category: cat.slug });
+                      setMobileFilterOpen(false);
+                    }}
+                    className={`flex items-center justify-between w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -339,13 +382,18 @@ export const ProductsPage = () => {
           </Card>
 
           {/* Price Range Filter Card */}
-          <Card className="rounded-2xl border-border bg-card p-4 shadow-2xs">
-            <div className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
-              <Filter size={14} className="text-chart-2" />
-              <span>Price Range (₹)</span>
-            </div>
+          <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-2xs">
+            <span className="block mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
+              Price Range (₹)
+            </span>
 
-            <form onSubmit={handleApplyPriceFilter} className="space-y-3">
+            <form
+              onSubmit={(e) => {
+                handleApplyPriceFilter(e);
+                setMobileFilterOpen(false);
+              }}
+              className="space-y-3"
+            >
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="min-price-input" className="text-[10px] font-semibold text-muted-foreground block mb-1">
@@ -358,7 +406,7 @@ export const ProductsPage = () => {
                     placeholder="0"
                     value={minPriceInput}
                     onChange={(e) => setMinPriceInput(e.target.value)}
-                    className="h-8 text-xs rounded-lg border-input bg-background/50"
+                    className="h-8 text-xs rounded-xl border-border/80 bg-background/50"
                   />
                 </div>
                 <div>
@@ -372,7 +420,7 @@ export const ProductsPage = () => {
                     placeholder="5000"
                     value={maxPriceInput}
                     onChange={(e) => setMaxPriceInput(e.target.value)}
-                    className="h-8 text-xs rounded-lg border-input bg-background/50"
+                    className="h-8 text-xs rounded-xl border-border/80 bg-background/50"
                   />
                 </div>
               </div>
@@ -380,12 +428,23 @@ export const ProductsPage = () => {
               <Button
                 type="submit"
                 size="sm"
-                className="w-full h-8 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+                className="w-full h-8 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs"
               >
                 Apply Price
               </Button>
             </form>
           </Card>
+
+          {/* Mobile Close / Done button */}
+          <div className="pt-2 lg:hidden">
+            <Button
+              type="button"
+              onClick={() => setMobileFilterOpen(false)}
+              className="w-full h-10 rounded-xl font-bold bg-secondary text-secondary-foreground"
+            >
+              Done
+            </Button>
+          </div>
         </aside>
 
         {/* Product Cards Grid Area */}
@@ -408,7 +467,8 @@ export const ProductsPage = () => {
             />
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-4">
+              {/* Product Cards Grid matching Homepage compact sizing */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-4 md:gap-5">
                 {products.map((product, index) => (
                   <ProductCard key={product.id || product.slug} product={product} index={index} />
                 ))}
@@ -419,7 +479,7 @@ export const ProductsPage = () => {
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={(p) => updateFilters({ page: p })}
-                className="pt-6 border-t border-border"
+                className="pt-6 border-t border-border/60"
               />
             </>
           )}

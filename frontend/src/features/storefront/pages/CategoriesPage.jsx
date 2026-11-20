@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Layers } from 'lucide-react';
 import { catalogService } from '../services/catalogService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
 import { CategoryCard } from '../components/CategoryCard.jsx';
 import { LoadingState } from '../../../components/shared/LoadingState.jsx';
 import { ErrorState } from '../../../components/shared/ErrorState.jsx';
-import { Badge } from '../../../components/ui/badge.jsx';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
 
 export const CategoriesPage = () => {
@@ -25,36 +23,28 @@ export const CategoriesPage = () => {
     : categoriesData?.results || [];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
-      {/* Breadcrumbs & Header */}
-      <div>
-        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
-            Home
-          </Link>
-          <span>/</span>
-          <span className="text-foreground font-semibold">Categories</span>
-        </nav>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-10">
+      {/* Breadcrumbs Navigation */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
+          Home
+        </Link>
+        <span>/</span>
+        <span className="text-foreground font-semibold">Categories</span>
+      </nav>
 
-        <div className="mt-3">
-          <Badge
-            variant="outline"
-            className="gap-1.5 border-primary/25 bg-primary/10 text-primary font-bold uppercase tracking-wider text-[11px] px-2.5 py-0.5"
-          >
-            <Layers size={12} className="stroke-[2.5]" />
-            <span>Store Taxonomy</span>
-          </Badge>
-          <h1 className="mt-2 text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
-            All Product Categories
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Browse our wide selection of regional and specialty merchandise.
-          </p>
-        </div>
+      {/* Centered Minimal Header */}
+      <div className="text-center max-w-2xl mx-auto space-y-2.5">
+        <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
+          Explore Categories
+        </h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Discover authentic handcrafted items and modern essentials across all verified departments.
+        </p>
       </div>
 
       {isLoading ? (
-        <LoadingState message="Loading catalog categories..." />
+        <LoadingState message="Loading categories..." />
       ) : isError ? (
         <ErrorState
           title="Failed to load categories"
@@ -62,14 +52,22 @@ export const CategoriesPage = () => {
           onRetry={refetch}
         />
       ) : categories.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-12">
-          No categories found.
-        </p>
+        <div className="text-center py-16 space-y-3">
+          <p className="text-sm font-medium text-muted-foreground">No categories found in the catalog.</p>
+          <Link
+            to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
+            className="inline-block text-xs font-semibold text-primary hover:underline"
+          >
+            Explore all products instead
+          </Link>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {categories.map((cat, idx) => (
-            <CategoryCard key={cat.id || cat.slug} category={cat} index={idx} />
-          ))}
+        <div className="rounded-3xl border border-border/60 bg-card/60 p-6 sm:p-8 md:p-10 shadow-2xs backdrop-blur-xs">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-y-8 gap-x-4 sm:gap-x-6 justify-items-center">
+            {categories.map((cat, idx) => (
+              <CategoryCard key={cat.id || cat.slug} category={cat} index={idx} />
+            ))}
+          </div>
         </div>
       )}
     </div>

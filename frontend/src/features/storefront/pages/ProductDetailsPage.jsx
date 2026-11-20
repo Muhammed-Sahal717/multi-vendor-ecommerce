@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   Truck,
   RotateCcw,
-  Store,
   Minus,
   Plus,
   Package,
@@ -21,8 +20,8 @@ import { useAuth } from '../../../context/AuthProvider.jsx';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 import { LoadingState } from '../../../components/shared/LoadingState.jsx';
 import { ErrorState } from '../../../components/shared/ErrorState.jsx';
+import { ProductCard } from '../components/ProductCard.jsx';
 import { Button } from '../../../components/ui/button.jsx';
-import { Badge } from '../../../components/ui/badge.jsx';
 import { Card } from '../../../components/ui/card.jsx';
 import { getProductImageUrl, getMediaUrl } from '../../../lib/utils.js';
 
@@ -48,6 +47,30 @@ export const ProductDetailsPage = () => {
     queryFn: () => catalogService.getProductBySlug(slug),
     enabled: Boolean(slug),
   });
+
+  const categorySlug =
+    typeof product?.category === 'object'
+      ? product?.category?.slug
+      : product?.category || '';
+
+  // Fetch related products for bottom recommendations
+  const { data: relatedData } = useQuery({
+    queryKey: queryKeys.catalog.products({
+      category: categorySlug,
+      page_size: 5,
+    }),
+    queryFn: () =>
+      catalogService.getProducts({
+        category: categorySlug,
+        page_size: 5,
+      }),
+    enabled: Boolean(categorySlug),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const relatedProducts = (
+    relatedData?.results || (Array.isArray(relatedData) ? relatedData : [])
+  ).filter((p) => p.id !== product?.id && p.slug !== product?.slug).slice(0, 4);
 
   // Add to cart mutation
   const addToCartMutation = useMutation({
@@ -87,6 +110,8 @@ export const ProductDetailsPage = () => {
     name,
     title,
     price,
+    original_price,
+    compare_at_price,
     stock = 0,
     sku,
     description,
@@ -97,6 +122,7 @@ export const ProductDetailsPage = () => {
   } = product;
 
   const displayTitle = title || name || 'Product';
+  const displayOriginalPrice = original_price || compare_at_price;
   const displayCategory =
     category_name || (typeof category === 'object' ? category?.name : null);
 
@@ -155,7 +181,7 @@ export const ProductDetailsPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-12">
-      {/* Breadcrumb Navigation */}
+      {/* Breadcrumbs Navigation */}
       <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
           Home
@@ -180,33 +206,23 @@ export const ProductDetailsPage = () => {
       </nav>
 
       {/* Main Section: Gallery + Product Buy Box */}
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-14">
-        {/* Left Column: Image Gallery (5 cols) */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12 items-start">
+        {/* Left Column: Image Gallery (6 cols) */}
         <div className="space-y-4 lg:col-span-6">
-          {/* Main Hero Preview */}
-          <Card className="relative aspect-square w-full overflow-hidden rounded-3xl border-border bg-card p-2 shadow-sm">
-            {activeImage ? (
-              <img
-                src={activeImage}
-                alt={displayTitle}
-                className="h-full w-full object-contain rounded-2xl transition-all duration-300"
-              />
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                <Package size={48} className="text-muted-foreground/40 stroke-[1.5]" />
-                <span className="text-sm">No photo preview</span>
-              </div>
-            )}
-
-            {/* Badges Overlay */}
-            <div className="absolute top-4 left-4 flex flex-col gap-1.5">
-              {displayCategory && (
-                <Badge
-                  variant="outline"
-                  className="border-primary/25 bg-card/90 text-primary text-xs font-semibold backdrop-blur-xs shadow-2xs"
-                >
-                  {displayCategory}
-                </Badge>
+          {/* Main Hero Preview with cute border container */}
+          <div className="relative aspect-square w-full overflow-hidden rounded-3xl border border-border/70 bg-card p-3 shadow-xs">
+            <div className="relative h-full w-full overflow-hidden rounded-2xl bg-muted/15 flex items-center justify-center border border-border/40">
+              {activeImage ? (
+                <img
+                  src={activeImage}
+                  alt={displayTitle}
+                  className="h-full w-full object-contain p-2 transition-all duration-300"
+                />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground/60">
+                  <Package size={42} className="stroke-[1.5]" />
+                  <span className="text-xs font-medium">No photo preview</span>
+                </div>
               )}
             </div>
 
@@ -214,28 +230,28 @@ export const ProductDetailsPage = () => {
             <button
               type="button"
               onClick={handleShare}
-              className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-card/90 border border-border text-muted-foreground hover:text-foreground shadow-2xs backdrop-blur-xs transition-colors"
+              className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-card/90 border border-border/80 text-muted-foreground hover:text-foreground shadow-2xs backdrop-blur-xs transition-colors cursor-pointer"
               title="Share product link"
             >
-              {copiedLink ? <Check size={14} className="text-chart-2" /> : <Share2 size={14} />}
+              {copiedLink ? <Check size={14} className="text-emerald-500" /> : <Share2 size={14} />}
             </button>
-          </Card>
+          </div>
 
           {/* Thumbnails Row */}
           {allImages.length > 1 && (
-            <div className="flex items-center gap-3 overflow-x-auto pb-2">
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
               {allImages.map((imgUrl, idx) => (
                 <button
                   key={imgUrl || idx}
                   type="button"
                   onClick={() => setSelectedImage(imgUrl)}
-                  className={`relative h-18 w-18 shrink-0 overflow-hidden rounded-xl border-2 transition-all p-1 bg-card ${
+                  className={`relative h-16 w-16 sm:h-20 sm:w-20 shrink-0 overflow-hidden rounded-2xl border transition-all p-1 bg-card cursor-pointer ${
                     activeImage === imgUrl
-                      ? 'border-primary ring-2 ring-primary/20 scale-102'
-                      : 'border-border opacity-70 hover:opacity-100 hover:border-primary/50'
+                      ? 'border-primary ring-2 ring-primary/20 scale-102 shadow-xs'
+                      : 'border-border/70 opacity-70 hover:opacity-100 hover:border-primary/40'
                   }`}
                 >
-                  <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="h-full w-full object-cover rounded-lg" />
+                  <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="h-full w-full object-cover rounded-xl" />
                 </button>
               ))}
             </div>
@@ -245,61 +261,84 @@ export const ProductDetailsPage = () => {
         {/* Right Column: Information & Purchase (6 cols) */}
         <div className="space-y-6 lg:col-span-6">
           {/* Header & Seller Info */}
-          <div className="space-y-2 border-b border-border pb-5">
-            {seller_name && (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-chart-2/30 bg-chart-2/15 px-2.5 py-0.5 text-xs font-bold text-chart-2">
-                <Store size={13} />
-                <span>Sold by {seller_name}</span>
-              </div>
+          <div className="space-y-2 border-b border-border/60 pb-5">
+            {displayCategory && (
+              <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {displayCategory}
+              </span>
             )}
 
-            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
+            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading leading-tight">
               {displayTitle}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
-              {sku && <span>SKU: <strong className="text-foreground">{sku}</strong></span>}
-              <span>•</span>
-              {/* Stock Status Badge */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs text-muted-foreground">
+              {seller_name && (
+                <>
+                  <span>
+                    Sold by{' '}
+                    <span className="font-bold text-foreground">
+                      {seller_name}
+                    </span>
+                  </span>
+                  <span>•</span>
+                </>
+              )}
+
+              {/* Minimal Clean Stock Status */}
               {isOutOfStock ? (
-                <Badge variant="destructive" className="text-xs">
+                <span className="inline-flex items-center gap-1.5 font-bold text-rose-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                   Out of Stock
-                </Badge>
+                </span>
+              ) : stock <= 5 ? (
+                <span className="inline-flex items-center gap-1.5 font-semibold text-amber-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Only {stock} left in stock
+                </span>
               ) : (
-                <Badge
-                  variant="outline"
-                  className="border-chart-4/30 bg-chart-4/15 text-foreground font-semibold text-xs"
-                >
+                <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   In Stock ({stock} available)
-                </Badge>
+                </span>
+              )}
+
+              {sku && (
+                <>
+                  <span>•</span>
+                  <span>SKU: <strong className="text-foreground">{sku}</strong></span>
+                </>
               )}
             </div>
           </div>
 
           {/* Price Box */}
-          <div className="flex items-baseline gap-4 py-2">
-            <PriceDisplay
-              price={price}
-              priceClassName="text-3xl font-black text-foreground font-heading"
-              originalPriceClassName="text-sm text-muted-foreground line-through"
-            />
-            <span className="text-xs font-medium text-muted-foreground">Inclusive of all taxes</span>
+          <div className="space-y-1">
+            <div className="flex items-baseline gap-3">
+              <PriceDisplay
+                price={price}
+                originalPrice={displayOriginalPrice}
+                priceClassName="text-3xl sm:text-4xl font-black text-foreground font-heading"
+                originalPriceClassName="text-base text-muted-foreground line-through"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Inclusive of all applicable taxes • Free shipping over ₹999</p>
           </div>
 
           {/* Quantity Selector & Action CTAs */}
           <div className="space-y-4 pt-2">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Quantity:
+                Qty:
               </span>
-              <div className="flex items-center rounded-xl border border-border bg-card p-1 shadow-2xs">
+              <div className="inline-flex items-center rounded-xl border border-border/80 bg-card p-1 shadow-2xs">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
                   disabled={quantity <= 1 || isOutOfStock}
                   onClick={() => handleQuantityChange(-1)}
-                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <Minus size={12} />
                 </Button>
@@ -312,7 +351,7 @@ export const ProductDetailsPage = () => {
                   size="icon-xs"
                   disabled={isOutOfStock || quantity >= stock}
                   onClick={() => handleQuantityChange(1)}
-                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <Plus size={12} />
                 </Button>
@@ -326,11 +365,11 @@ export const ProductDetailsPage = () => {
                 size="lg"
                 disabled={isOutOfStock || addToCartMutation.isPending}
                 onClick={handleAddToCart}
-                className="flex-1 h-11 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 gap-2"
+                className="flex-1 h-12 text-xs font-bold rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/25 gap-2 cursor-pointer transition-all"
               >
                 {isAdded ? (
                   <>
-                    <Check size={16} className="text-chart-2 stroke-[2.5]" />
+                    <Check size={16} className="stroke-[2.5]" />
                     <span>Added to Cart!</span>
                   </>
                 ) : (
@@ -347,45 +386,68 @@ export const ProductDetailsPage = () => {
                 size="lg"
                 disabled={isOutOfStock || addToCartMutation.isPending}
                 onClick={handleBuyNow}
-                className="flex-1 h-11 text-xs font-bold border-primary text-primary hover:bg-primary/10"
+                className="flex-1 h-12 text-xs font-bold rounded-2xl border-primary/50 text-foreground hover:bg-primary/10 cursor-pointer transition-all"
               >
                 Buy Now
               </Button>
             </div>
           </div>
 
-          {/* Guarantee Badges */}
-          <Card className="grid grid-cols-3 gap-3 rounded-2xl border-border bg-card/60 p-4 text-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <ShieldCheck size={20} className="text-chart-2" />
+          {/* Minimal Clean Guarantee Strip */}
+          <div className="grid grid-cols-3 gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 text-center">
+            <div className="flex flex-col items-center gap-1">
+              <ShieldCheck size={18} className="text-primary stroke-[2]" />
               <span className="text-[11px] font-bold text-foreground">100% Genuine</span>
               <span className="text-[10px] text-muted-foreground">Direct from seller</span>
             </div>
-            <div className="flex flex-col items-center gap-1.5 border-x border-border">
-              <Truck size={20} className="text-chart-4" />
+            <div className="flex flex-col items-center gap-1 border-x border-border/60">
+              <Truck size={18} className="text-primary stroke-[2]" />
               <span className="text-[11px] font-bold text-foreground">Fast Delivery</span>
-              <span className="text-[10px] text-muted-foreground">Free over ₹999</span>
+              <span className="text-[10px] text-muted-foreground">Free above ₹999</span>
             </div>
-            <div className="flex flex-col items-center gap-1.5">
-              <RotateCcw size={20} className="text-chart-5" />
+            <div className="flex flex-col items-center gap-1">
+              <RotateCcw size={18} className="text-primary stroke-[2]" />
               <span className="text-[11px] font-bold text-foreground">Easy Return</span>
               <span className="text-[10px] text-muted-foreground">7-day replacement</span>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
 
-      {/* Description & Details Section */}
-      <section className="space-y-4 pt-6 border-t border-border">
+      {/* Description Section */}
+      <section className="space-y-4 pt-6 border-t border-border/60">
         <h2 className="text-xl font-black tracking-tight text-foreground font-heading">
-          Product Description
+          Product Details & Description
         </h2>
-        <Card className="rounded-2xl border-border bg-card p-6 shadow-2xs">
+        <Card className="rounded-3xl border-border/70 bg-card p-6 sm:p-8 shadow-2xs">
           <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
             {description || 'No detailed description provided for this product.'}
           </p>
         </Card>
       </section>
+
+      {/* Related Recommendations Section */}
+      {relatedProducts.length > 0 && (
+        <section className="space-y-6 pt-6 border-t border-border/60">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-foreground font-heading">
+                Related Products
+              </h2>
+              <p className="text-xs text-muted-foreground">Explore more items in this category</p>
+            </div>
+            <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary">
+              <Link to={`${ROUTE_PATHS.STOREFRONT.PRODUCTS}?category=${categorySlug}`}>View All</Link>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 sm:gap-4 md:gap-5">
+            {relatedProducts.map((p, idx) => (
+              <ProductCard key={p.id || p.slug} product={p} index={idx} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };
