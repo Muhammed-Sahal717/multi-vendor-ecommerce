@@ -63,48 +63,62 @@ export const Navbar = () => {
       </div>
 
       {/* Main Header / Navigation */}
-      <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          {/* Logo & Navigation */}
-          <div className="flex items-center gap-8">
+          {/* Left: Brand Logo & Navigation Links */}
+          <div className="flex items-center gap-6 lg:gap-8 shrink-0">
             <Logo imgClassName="h-8 w-8 sm:h-9 sm:w-9" textClassName="text-xl sm:text-2xl" />
-            <nav className="hidden items-center gap-6 text-sm font-semibold text-muted-foreground md:flex">
+            <nav className="hidden items-center gap-5 text-xs font-bold uppercase tracking-wider text-muted-foreground md:flex">
               <Link
                 to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
-                className="transition-colors hover:text-foreground"
+                className="transition-colors hover:text-primary"
               >
                 Products
               </Link>
+              {!isSeller && !isAdmin && (
+                <Link
+                  to={ROUTE_PATHS.SELLER.APPLICATION}
+                  className="transition-colors hover:text-primary"
+                >
+                  Sell on Galla
+                </Link>
+              )}
             </nav>
           </div>
 
-          {/* Search bar */}
-          <div className="hidden max-w-md flex-1 md:block">
+          {/* Center: Search bar */}
+          <div className="hidden max-w-md flex-1 md:block mx-2 lg:mx-4">
             <SearchInput />
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Shopping Cart Button */}
-            <Button asChild variant="outline" size="sm" className="relative h-9 px-3 border-border hover:border-primary/40">
-              <Link to={ROUTE_PATHS.STOREFRONT.CART} aria-label="Shopping Cart">
-                <ShoppingCart size={17} className="text-foreground" />
-                {cartItemCount > 0 && (
-                  <Badge
-                    className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs"
-                  >
-                    {cartItemCount}
-                  </Badge>
-                )}
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="relative h-9 rounded-full px-3.5 border-border/80 hover:border-primary/40 hover:bg-muted/40 transition-all cursor-pointer shadow-2xs"
+            >
+              <Link to={ROUTE_PATHS.STOREFRONT.CART} aria-label="Shopping Cart" className="flex items-center gap-1.5">
+                <div className="relative">
+                  <ShoppingCart size={16} className="text-foreground" />
+                  {cartItemCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs">
+                      {cartItemCount}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden sm:inline text-xs font-semibold text-foreground">Cart</span>
               </Link>
             </Button>
 
             {/* Auth State Button / Dropdown */}
             {isAuthenticated ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center">
                 {/* Account Menu */}
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/40 focus:outline-none transition-all">
+                  <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/40 focus:outline-none transition-all cursor-pointer">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
                       {user?.first_name ? user.first_name[0].toUpperCase() : <User size={13} />}
                     </div>
@@ -113,49 +127,49 @@ export const Navbar = () => {
                     </span>
                     <ChevronDown size={14} className="text-muted-foreground" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl border border-border bg-card shadow-lg">
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-semibold leading-none text-foreground">{user?.first_name || 'My Account'}</p>
-                          <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                      <DropdownMenuLabel className="font-normal px-2 py-1.5">
+                        <div className="flex flex-col space-y-0.5">
+                          <p className="text-xs font-bold leading-none text-foreground">{user?.first_name || 'My Account'}</p>
+                          <p className="text-[11px] leading-none text-muted-foreground truncate">{user?.email}</p>
                         </div>
                       </DropdownMenuLabel>
                     </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-1" />
 
                     {/* Customer Links */}
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         onClick={() => navigate(ROUTE_PATHS.CUSTOMER.DASHBOARD)}
-                        className="cursor-pointer gap-2"
+                        className="cursor-pointer gap-2 rounded-xl text-xs"
                       >
-                        <LayoutDashboard size={15} /> Dashboard
+                        <LayoutDashboard size={14} /> Dashboard
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => navigate(ROUTE_PATHS.CUSTOMER.ORDERS)}
-                        className="cursor-pointer gap-2"
+                        className="cursor-pointer gap-2 rounded-xl text-xs"
                       >
-                        <Package size={15} /> My Orders
+                        <Package size={14} /> My Orders
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => navigate(ROUTE_PATHS.CUSTOMER.ADDRESSES)}
-                        className="cursor-pointer gap-2"
+                        className="cursor-pointer gap-2 rounded-xl text-xs"
                       >
-                        <MapPin size={15} /> Addresses
+                        <MapPin size={14} /> Addresses
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
 
                     {/* Role based links */}
                     {isSeller && (
                       <>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="my-1" />
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             onClick={() => navigate(ROUTE_PATHS.SELLER.DASHBOARD)}
-                            className="cursor-pointer gap-2 font-semibold text-chart-5"
+                            className="cursor-pointer gap-2 rounded-xl text-xs font-semibold text-chart-5"
                           >
-                            <Store size={15} /> Seller Portal
+                            <Store size={14} /> Seller Portal
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
                       </>
@@ -163,48 +177,36 @@ export const Navbar = () => {
 
                     {isAdmin && (
                       <>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="my-1" />
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             onClick={() => navigate(ROUTE_PATHS.ADMIN.DASHBOARD)}
-                            className="cursor-pointer gap-2 font-semibold text-chart-3"
+                            className="cursor-pointer gap-2 rounded-xl text-xs font-semibold text-chart-3"
                           >
-                            <Shield size={15} /> Admin Portal
+                            <Shield size={14} /> Admin Portal
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
                       </>
                     )}
 
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         onClick={handleLogout}
-                        className="cursor-pointer gap-2 font-semibold text-destructive focus:text-destructive focus:bg-destructive/10"
+                        className="cursor-pointer gap-2 rounded-xl text-xs font-semibold text-destructive focus:text-destructive focus:bg-destructive/10"
                       >
-                        <LogOut size={15} /> Log Out
+                        <LogOut size={14} /> Log Out
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-                {/* Direct Visible Logout Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="h-9 gap-1.5 px-2.5 text-xs font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  title="Sign out of your account"
-                >
-                  <LogOut size={15} />
-                  <span className="hidden md:inline">Log Out</span>
-                </Button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Button asChild variant="ghost" size="sm" className="font-semibold text-muted-foreground hover:text-foreground">
+                <Button asChild variant="ghost" size="sm" className="h-9 rounded-full px-3 text-xs font-semibold text-foreground hover:bg-muted/50 cursor-pointer">
                   <Link to={ROUTE_PATHS.AUTH.LOGIN}>Sign In</Link>
                 </Button>
-                <Button asChild size="sm" className="bg-primary text-primary-foreground font-semibold hover:bg-primary/90 shadow-xs">
+                <Button asChild size="sm" className="h-9 rounded-full px-4 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs cursor-pointer">
                   <Link to={ROUTE_PATHS.AUTH.REGISTER}>Register</Link>
                 </Button>
               </div>
