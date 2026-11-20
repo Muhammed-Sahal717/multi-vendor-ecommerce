@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Check,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { catalogService } from '../services/catalogService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
@@ -19,7 +20,6 @@ import { ErrorState } from '../../../components/shared/ErrorState.jsx';
 import { EmptyState } from '../../../components/shared/EmptyState.jsx';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
-import { Card } from '../../../components/ui/card.jsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +36,14 @@ const SORT_OPTIONS = [
   { label: 'Product Name (A-Z)', value: 'name' },
 ];
 
-const PAGE_SIZE = 12;
+const PRICE_PRESETS = [
+  { label: 'Under ₹500', min: '', max: '500' },
+  { label: '₹500 – ₹1,500', min: '500', max: '1500' },
+  { label: '₹1,500 – ₹5,000', min: '1500', max: '5000' },
+  { label: 'Above ₹5,000', min: '5000', max: '' },
+];
+
+const PAGE_SIZE = 15;
 
 export const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,10 +56,10 @@ export const ProductsPage = () => {
   const selectedOrdering = searchParams.get('ordering') || '-created_at';
   const currentPage = parseInt(searchParams.get('page') || '1', 10);
 
-  // Local price inputs
+  // Local filter states
   const [minPriceInput, setMinPriceInput] = useState(minPriceParam);
   const [maxPriceInput, setMaxPriceInput] = useState(maxPriceParam);
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   // Query object for API
   const queryParams = useMemo(() => {
@@ -75,7 +82,7 @@ export const ProductsPage = () => {
     maxPriceParam,
   ]);
 
-  // 1. Fetch Categories for Filter Sidebar
+  // 1. Fetch Categories
   const { data: categoriesData } = useQuery({
     queryKey: queryKeys.catalog.categories(),
     queryFn: catalogService.getCategories,
@@ -85,7 +92,7 @@ export const ProductsPage = () => {
     ? categoriesData
     : categoriesData?.results || [];
 
-  // 2. Fetch Products with Active Filters
+  // 2. Fetch Products
   const {
     data: productsData,
     isLoading,
@@ -115,7 +122,6 @@ export const ProductsPage = () => {
       }
     });
 
-    // Reset to page 1 on filter changes unless changing page itself
     if (!('page' in newParams)) {
       updated.set('page', '1');
     }
@@ -123,368 +129,439 @@ export const ProductsPage = () => {
     setSearchParams(updated);
   };
 
-  const handleApplyPriceFilter = (e) => {
+  const handleApplyCustomPrice = (e) => {
     e.preventDefault();
     updateFilters({
       min_price: minPriceInput.trim(),
       max_price: maxPriceInput.trim(),
     });
+    setIsFilterDrawerOpen(false);
+  };
+
+  const handleApplyPresetPrice = (min, max) => {
+    setMinPriceInput(min);
+    setMaxPriceInput(max);
+    updateFilters({
+      min_price: min,
+      max_price: max,
+    });
+    setIsFilterDrawerOpen(false);
   };
 
   const handleClearFilters = () => {
     setMinPriceInput('');
     setMaxPriceInput('');
     setSearchParams(new URLSearchParams());
+    setIsFilterDrawerOpen(false);
   };
 
   // Find active category label
   const activeCategoryObj = categories.find((c) => c.slug === selectedCategory);
   const activeCategoryName = activeCategoryObj?.name || selectedCategory;
-  const hasActiveFilters = Boolean(selectedCategory || searchQuery || minPriceParam || maxPriceParam);
+
+  // Count how many active filters
+  const activeFilterCount = [
+    Boolean(selectedCategory),
+    Boolean(searchQuery),
+    Boolean(minPriceParam || maxPriceParam),
+  ].filter(Boolean).length;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
-      {/* Breadcrumbs Navigation */}
+    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-5">
+      {/* Breadcrumb Row */}
       <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
           Home
         </Link>
         <span>/</span>
-        <span className="text-foreground font-semibold">Products</span>
+        <span className={activeCategoryName ? 'text-muted-foreground' : 'text-foreground font-semibold'}>
+          Products
+        </span>
         {activeCategoryName && (
           <>
             <span>/</span>
-            <span className="text-primary font-bold">{activeCategoryName}</span>
+            <span className="text-foreground font-semibold">{activeCategoryName}</span>
           </>
         )}
       </nav>
 
-      {/* Page Header with Minimal Clean Title and Action Controls */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end border-b border-border/60 pb-6">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
-            {activeCategoryName ? activeCategoryName : 'Explore Catalog'}
-          </h1>
-          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-            Showing {products.length} of {totalCount} verified items
-          </p>
-        </div>
-
-        {/* Top Sort & Mobile Filter Toggle */}
-        <div className="flex items-center gap-2.5">
-          {/* Mobile Filter Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMobileFilterOpen((prev) => !prev)}
-            className="h-9 gap-1.5 rounded-full border-border/80 px-3.5 text-xs font-semibold lg:hidden cursor-pointer"
-          >
-            <SlidersHorizontal size={14} />
-            <span>Filters {hasActiveFilters && '•'}</span>
-          </Button>
-
-          {/* Sort Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border/80 bg-card px-4 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/30 focus:outline-none transition-all cursor-pointer">
-              <ArrowUpDown size={13} className="text-muted-foreground" />
-              <span>{(SORT_OPTIONS.find((opt) => opt.value === selectedOrdering) || SORT_OPTIONS[0]).label}</span>
-              <ChevronDown size={13} className="text-muted-foreground" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-2xl border border-border/80 bg-card shadow-lg">
-              <DropdownMenuGroup>
-                {SORT_OPTIONS.map((opt) => {
-                  const isSelected = selectedOrdering === opt.value;
-                  return (
-                    <DropdownMenuItem
-                      key={opt.value}
-                      onClick={() => updateFilters({ ordering: opt.value })}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
-                        isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-muted/50'
-                      }`}
-                    >
-                      <span>{opt.label}</span>
-                      {isSelected && <Check size={14} className="text-primary stroke-[2.5]" />}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Horizontal Category Quick-Pills for One-Tap Category Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => updateFilters({ category: '' })}
-          className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-            !selectedCategory
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
-          }`}
-        >
-          All
-        </button>
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat.slug;
-          return (
+      {/* Modern Horizontal Category Carousel & Filter Action Bar */}
+      <div className="space-y-3.5">
+        {/* Category Quick Pills */}
+        <div className="relative flex items-center">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none scroll-smooth w-full">
             <button
-              key={cat.id || cat.slug}
               type="button"
-              onClick={() => updateFilters({ category: cat.slug })}
+              onClick={() => updateFilters({ category: '' })}
               className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+                !selectedCategory
+                  ? 'bg-foreground text-background shadow-xs font-bold'
+                  : 'border border-border/80 bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground'
               }`}
             >
-              {cat.name}
+              All Categories
             </button>
-          );
-        })}
-      </div>
-
-      {/* Active Filter Chips (Clean & Minimal without loud multi-colored badges) */}
-      {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-xs font-semibold text-muted-foreground">Filters:</span>
-
-          {selectedCategory && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
-              <span>{activeCategoryName}</span>
-              <button
-                type="button"
-                onClick={() => updateFilters({ category: '' })}
-                className="rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Remove category filter"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
-
-          {searchQuery && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
-              <span>&ldquo;{searchQuery}&rdquo;</span>
-              <button
-                type="button"
-                onClick={() => updateFilters({ search: '' })}
-                className="rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Remove search filter"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
-
-          {(minPriceParam || maxPriceParam) && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
-              <span>₹{minPriceParam || '0'} – ₹{maxPriceParam || '∞'}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setMinPriceInput('');
-                  setMaxPriceInput('');
-                  updateFilters({ min_price: '', max_price: '' });
-                }}
-                className="rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Remove price filter"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClearFilters}
-            className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-destructive gap-1"
-          >
-            <RotateCcw size={12} />
-            <span>Reset</span>
-          </Button>
+            {categories.map((cat) => {
+              const isSelected = selectedCategory === cat.slug;
+              return (
+                <button
+                  key={cat.id || cat.slug}
+                  type="button"
+                  onClick={() => updateFilters({ category: isSelected ? '' : cat.slug })}
+                  className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                      : 'border border-border/80 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
 
-      {/* Main Grid: Sidebar + Product Listings */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-4 pt-2">
-        {/* Desktop Filter Sidebar & Mobile Drawer */}
-        <aside
-          className={`space-y-6 lg:block ${
-            mobileFilterOpen
-              ? 'fixed inset-0 z-50 overflow-y-auto bg-background/80 backdrop-blur-md p-6 lg:static lg:p-0 lg:bg-transparent lg:backdrop-blur-none'
-              : 'hidden'
-          }`}
-        >
-          {/* Mobile drawer header */}
-          <div className="flex items-center justify-between pb-4 border-b border-border lg:hidden">
-            <h3 className="text-base font-bold text-foreground">Filters</h3>
+        {/* Action Toolbar: Filter Trigger, Active Count, Sort Dropdown */}
+        <div className="flex items-center justify-between gap-3 border-y border-border/60 py-3">
+          {/* Left Action Buttons */}
+          <div className="flex items-center gap-2.5">
+            {/* Filter Drawer Trigger Button */}
             <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setMobileFilterOpen(false)}
-              className="rounded-full"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFilterDrawerOpen(true)}
+              className={`h-9 gap-2 rounded-full border px-4 text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                activeFilterCount > 0
+                  ? 'border-primary/50 bg-primary/10 text-primary font-bold'
+                  : 'border-border/80 bg-card text-foreground hover:border-primary/40'
+              }`}
             >
-              <X size={18} />
+              <SlidersHorizontal size={14} />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
             </Button>
+
+            {/* Quick Reset if filters active */}
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearFilters}
+                className="hidden sm:inline-flex h-9 gap-1.5 rounded-full px-3 text-xs font-medium text-muted-foreground hover:text-destructive cursor-pointer"
+              >
+                <RotateCcw size={13} />
+                <span>Reset</span>
+              </Button>
+            )}
           </div>
 
-          {/* Categories Filter Card */}
-          <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-2xs">
-            <span className="block mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
-              Categories
-            </span>
+          {/* Right Action: Sort Menu */}
+          <div className="flex items-center gap-3">
+            {/* Sort Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 sm:px-4 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/30 focus:outline-none transition-all cursor-pointer">
+                <ArrowUpDown size={13} className="text-muted-foreground" />
+                <span className="truncate max-w-[130px] sm:max-w-none">
+                  {(SORT_OPTIONS.find((opt) => opt.value === selectedOrdering) || SORT_OPTIONS[0]).label}
+                </span>
+                <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-2xl border border-border/80 bg-card shadow-lg">
+                <DropdownMenuGroup>
+                  {SORT_OPTIONS.map((opt) => {
+                    const isSelected = selectedOrdering === opt.value;
+                    return (
+                      <DropdownMenuItem
+                        key={opt.value}
+                        onClick={() => updateFilters({ ordering: opt.value })}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
+                          isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <Check size={14} className="text-primary stroke-[2.5]" />}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
 
-            <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
-              <button
-                type="button"
-                onClick={() => {
-                  updateFilters({ category: '' });
-                  setMobileFilterOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                  !selectedCategory
-                    ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
-                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                }`}
+        {/* Active Filter Chips Row */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {selectedCategory && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+                <span>Category: <strong className="font-bold">{activeCategoryName}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ category: '' })}
+                  className="rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Remove category filter"
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            )}
+
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+                <span>Keyword: <strong className="font-bold">&ldquo;{searchQuery}&rdquo;</strong></span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ search: '' })}
+                  className="rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Remove search filter"
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            )}
+
+            {(minPriceParam || maxPriceParam) && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs">
+                <span>Price: <strong className="font-bold">₹{minPriceParam || '0'} – ₹{maxPriceParam || '∞'}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinPriceInput('');
+                    setMaxPriceInput('');
+                    updateFilters({ min_price: '', max_price: '' });
+                  }}
+                  className="rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Remove price filter"
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="text-xs font-semibold text-muted-foreground hover:text-destructive underline-offset-4 hover:underline ml-1 cursor-pointer"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Full-Width Responsive Products Grid Area */}
+      <main className="space-y-8 pt-2">
+        {isLoading ? (
+          <LoadingState message="Loading catalog products..." />
+        ) : isError ? (
+          <ErrorState
+            title="Failed to load products"
+            message="Could not load the products for this selection."
+            onRetry={refetch}
+          />
+        ) : products.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No products found"
+            description="Try selecting a different category or clearing your active filters."
+            actionLabel="Reset All Filters"
+            onAction={handleClearFilters}
+          />
+        ) : (
+          <>
+            {/* Fluid, Full-Width Responsive Grid: 2-cols mobile, 3-cols tablet, 4-cols laptop, 5-cols desktop */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:gap-4 md:gap-5">
+              {products.map((product) => (
+                <ProductCard key={product.id || product.slug} product={product} />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={(p) => updateFilters({ page: p })}
+              className="pt-8 border-t border-border/60"
+            />
+          </>
+        )}
+      </main>
+
+      {/* Modern Slide-Over Filter Drawer (Works on Mobile, Tablet & Desktop) */}
+      {isFilterDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsFilterDrawerOpen(false)}
+          />
+
+          {/* Drawer Sheet */}
+          <div className="relative z-10 flex h-full w-full max-w-sm flex-col bg-card shadow-2xl border-l border-border/80 p-6 overflow-y-auto animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={16} className="text-primary" />
+                <h3 className="text-base font-bold text-foreground">Filter Catalog</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setIsFilterDrawerOpen(false)}
+                className="rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                All Categories
-              </button>
+                <X size={18} />
+              </Button>
+            </div>
 
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === cat.slug;
-                return (
+            {/* Filter Content */}
+            <div className="space-y-6 py-5 flex-1">
+              {/* Categories Section */}
+              <div className="space-y-3">
+                <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Department
+                </span>
+
+                <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
                   <button
-                    key={cat.id || cat.slug}
                     type="button"
                     onClick={() => {
-                      updateFilters({ category: cat.slug });
-                      setMobileFilterOpen(false);
+                      updateFilters({ category: '' });
+                      setIsFilterDrawerOpen(false);
                     }}
                     className={`flex items-center justify-between w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                      !selectedCategory
+                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                   >
-                    <span className="truncate">{cat.name}</span>
-                    {cat.product_count !== undefined && (
-                      <span className={`text-[10px] ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground/60'}`}>
-                        {cat.product_count}
-                      </span>
-                    )}
+                    <span>All Departments</span>
+                    {!selectedCategory && <Check size={14} className="stroke-[2.5]" />}
                   </button>
-                );
-              })}
+
+                  {categories.map((cat) => {
+                    const isSelected = selectedCategory === cat.slug;
+                    return (
+                      <button
+                        key={cat.id || cat.slug}
+                        type="button"
+                        onClick={() => {
+                          updateFilters({ category: isSelected ? '' : cat.slug });
+                          setIsFilterDrawerOpen(false);
+                        }}
+                        className={`flex items-center justify-between w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        }`}
+                      >
+                        <span className="truncate">{cat.name}</span>
+                        {isSelected ? (
+                          <Check size={14} className="stroke-[2.5]" />
+                        ) : cat.product_count !== undefined ? (
+                          <span className="text-[10px] text-muted-foreground/60">{cat.product_count}</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Price Presets */}
+              <div className="space-y-3 border-t border-border/60 pt-5">
+                <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Price Range
+                </span>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {PRICE_PRESETS.map((preset) => {
+                    const isCurrent = minPriceParam === preset.min && maxPriceParam === preset.max;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => handleApplyPresetPrice(preset.min, preset.max)}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold text-center transition-all cursor-pointer border ${
+                          isCurrent
+                            ? 'border-primary bg-primary/10 text-primary font-bold'
+                            : 'border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Min/Max Input */}
+                <form onSubmit={handleApplyCustomPrice} className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label htmlFor="drawer-min-price" className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                        Min (₹)
+                      </label>
+                      <Input
+                        id="drawer-min-price"
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={minPriceInput}
+                        onChange={(e) => setMinPriceInput(e.target.value)}
+                        className="h-8 text-xs rounded-xl border-border/80 bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="drawer-max-price" className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                        Max (₹)
+                      </label>
+                      <Input
+                        id="drawer-max-price"
+                        type="number"
+                        min="0"
+                        placeholder="10000"
+                        value={maxPriceInput}
+                        onChange={(e) => setMaxPriceInput(e.target.value)}
+                        className="h-8 text-xs rounded-xl border-border/80 bg-background"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="w-full h-8 text-xs font-bold rounded-xl bg-foreground text-background hover:bg-foreground/90 cursor-pointer shadow-xs"
+                  >
+                    Set Custom Range
+                  </Button>
+                </form>
+              </div>
             </div>
-          </Card>
 
-          {/* Price Range Filter Card */}
-          <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-2xs">
-            <span className="block mb-3 text-xs font-bold text-foreground uppercase tracking-wider">
-              Price Range (₹)
-            </span>
-
-            <form
-              onSubmit={(e) => {
-                handleApplyPriceFilter(e);
-                setMobileFilterOpen(false);
-              }}
-              className="space-y-3"
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor="min-price-input" className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                    Min
-                  </label>
-                  <Input
-                    id="min-price-input"
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={minPriceInput}
-                    onChange={(e) => setMinPriceInput(e.target.value)}
-                    className="h-8 text-xs rounded-xl border-border/80 bg-background/50"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="max-price-input" className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                    Max
-                  </label>
-                  <Input
-                    id="max-price-input"
-                    type="number"
-                    min="0"
-                    placeholder="5000"
-                    value={maxPriceInput}
-                    onChange={(e) => setMaxPriceInput(e.target.value)}
-                    className="h-8 text-xs rounded-xl border-border/80 bg-background/50"
-                  />
-                </div>
-              </div>
-
+            {/* Drawer Bottom Actions */}
+            <div className="border-t border-border/60 pt-4 flex items-center gap-3">
               <Button
-                type="submit"
-                size="sm"
-                className="w-full h-8 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs"
+                type="button"
+                variant="outline"
+                onClick={handleClearFilters}
+                className="flex-1 h-10 rounded-xl text-xs font-bold border-border/80 text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                Apply Price
+                Reset
               </Button>
-            </form>
-          </Card>
-
-          {/* Mobile Close / Done button */}
-          <div className="pt-2 lg:hidden">
-            <Button
-              type="button"
-              onClick={() => setMobileFilterOpen(false)}
-              className="w-full h-10 rounded-xl font-bold bg-secondary text-secondary-foreground"
-            >
-              Done
-            </Button>
+              <Button
+                type="button"
+                onClick={() => setIsFilterDrawerOpen(false)}
+                className="flex-1 h-10 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/20"
+              >
+                Apply Filters
+              </Button>
+            </div>
           </div>
-        </aside>
-
-        {/* Product Cards Grid Area */}
-        <main className="lg:col-span-3 space-y-8">
-          {isLoading ? (
-            <LoadingState message="Loading catalog products..." />
-          ) : isError ? (
-            <ErrorState
-              title="Failed to load products"
-              message="Could not load the products for this selection."
-              onRetry={refetch}
-            />
-          ) : products.length === 0 ? (
-            <EmptyState
-              icon={Search}
-              title="No products match your filters"
-              description="Try adjusting your category, price range, or search keyword."
-              actionLabel="Reset All Filters"
-              onAction={handleClearFilters}
-            />
-          ) : (
-            <>
-              {/* Product Cards Grid matching Homepage compact sizing */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-4 md:gap-5">
-                {products.map((product, index) => (
-                  <ProductCard key={product.id || product.slug} product={product} index={index} />
-                ))}
-              </div>
-
-              {/* Pagination */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={(p) => updateFilters({ page: p })}
-                className="pt-6 border-t border-border/60"
-              />
-            </>
-          )}
-        </main>
-      </div>
+        </div>
+      )}
     </div>
   );
 };
