@@ -137,7 +137,7 @@ export const CategoryCard = ({ category }) => {
 
   return (
     <Link
-      to={ROUTE_PATHS.STOREFRONT.CATEGORY_PRODUCTS(slug)}
+      to={`${ROUTE_PATHS.STOREFRONT.PRODUCTS}?category=${encodeURIComponent(slug || '')}`}
       className="group flex flex-col items-center justify-center shrink-0 focus:outline-hidden select-none"
       title={name}
     >

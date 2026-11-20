@@ -25,11 +25,6 @@ export const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to={ROUTE_PATHS.STOREFRONT.CATEGORIES} className="transition-colors hover:text-primary">
-                  Categories
-                </Link>
-              </li>
-              <li>
                 <Link to={ROUTE_PATHS.STOREFRONT.CART} className="transition-colors hover:text-primary">
                   Shopping Cart
                 </Link>

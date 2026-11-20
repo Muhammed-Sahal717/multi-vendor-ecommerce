@@ -49,7 +49,7 @@ export const HeroBanner = () => {
               size="lg"
               className="border-background/20 bg-background/5 text-background hover:bg-background/15"
             >
-              <Link to={ROUTE_PATHS.STOREFRONT.CATEGORIES}>Explore Categories</Link>
+              <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>Explore Products</Link>
             </Button>
           </div>
 

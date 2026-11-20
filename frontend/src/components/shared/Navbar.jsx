@@ -75,12 +75,6 @@ export const Navbar = () => {
               >
                 Products
               </Link>
-              <Link
-                to={ROUTE_PATHS.STOREFRONT.CATEGORIES}
-                className="transition-colors hover:text-foreground"
-              >
-                Categories
-              </Link>
             </nav>
           </div>
 
