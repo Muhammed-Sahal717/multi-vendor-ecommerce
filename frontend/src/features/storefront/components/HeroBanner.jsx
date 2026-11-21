@@ -22,7 +22,7 @@ export const HeroBanner = () => {
 
           <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl text-background">
             Everything you need, in one{' '}
-            <span className="bg-gradient-to-r from-primary via-chart-2 to-chart-4 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary via-chart-4 to-accent bg-clip-text text-transparent">
               Galla.
             </span>
           </h1>
