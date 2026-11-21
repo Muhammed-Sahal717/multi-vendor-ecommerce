@@ -61,6 +61,33 @@ export const ProductsPage = () => {
   const [maxPriceInput, setMaxPriceInput] = useState(maxPriceParam);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
+  // 1. Fetch Categories
+  const { data: categoriesData } = useQuery({
+    queryKey: queryKeys.catalog.categories(),
+    queryFn: catalogService.getCategories,
+  });
+
+  const categories = useMemo(() => {
+    return Array.isArray(categoriesData)
+      ? categoriesData
+      : categoriesData?.results || [];
+  }, [categoriesData]);
+
+  // Match category by slug, id, or uuid
+  const matchedCategory = useMemo(() => {
+    if (!selectedCategory) return null;
+    return (
+      categories.find(
+        (c) =>
+          c.slug === selectedCategory ||
+          String(c.id) === String(selectedCategory) ||
+          c.name?.toLowerCase() === selectedCategory.toLowerCase()
+      ) || null
+    );
+  }, [categories, selectedCategory]);
+
+  const effectiveCategorySlug = matchedCategory?.slug || selectedCategory;
+
   // Query object for API
   const queryParams = useMemo(() => {
     const params = {
@@ -68,7 +95,7 @@ export const ProductsPage = () => {
       page_size: PAGE_SIZE,
       ordering: selectedOrdering,
     };
-    if (selectedCategory) params.category = selectedCategory;
+    if (effectiveCategorySlug) params.category = effectiveCategorySlug;
     if (searchQuery) params.search = searchQuery;
     if (minPriceParam) params.min_price = minPriceParam;
     if (maxPriceParam) params.max_price = maxPriceParam;
@@ -76,21 +103,11 @@ export const ProductsPage = () => {
   }, [
     currentPage,
     selectedOrdering,
-    selectedCategory,
+    effectiveCategorySlug,
     searchQuery,
     minPriceParam,
     maxPriceParam,
   ]);
-
-  // 1. Fetch Categories
-  const { data: categoriesData } = useQuery({
-    queryKey: queryKeys.catalog.categories(),
-    queryFn: catalogService.getCategories,
-  });
-
-  const categories = Array.isArray(categoriesData)
-    ? categoriesData
-    : categoriesData?.results || [];
 
   // 2. Fetch Products
   const {
@@ -156,8 +173,7 @@ export const ProductsPage = () => {
   };
 
   // Find active category label
-  const activeCategoryObj = categories.find((c) => c.slug === selectedCategory);
-  const activeCategoryName = activeCategoryObj?.name || selectedCategory;
+  const activeCategoryName = matchedCategory?.name || selectedCategory;
 
   // Count how many active filters
   const activeFilterCount = [
@@ -202,7 +218,7 @@ export const ProductsPage = () => {
               All Categories
             </button>
             {categories.map((cat) => {
-              const isSelected = selectedCategory === cat.slug;
+              const isSelected = effectiveCategorySlug === cat.slug;
               return (
                 <button
                   key={cat.id || cat.slug}
