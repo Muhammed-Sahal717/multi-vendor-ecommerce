@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const HERO_SLIDES = [
-  { id: 1, src: '/hero1.jpeg', alt: 'Marketplace Banner 1' },
-  { id: 2, src: '/hero2.jpeg', alt: 'Marketplace Banner 2' },
-  { id: 3, src: '/hero3.jpeg', alt: 'Marketplace Banner 3' },
-  { id: 4, src: '/hero4.jpeg', alt: 'Marketplace Banner 4' },
+  { id: 1, src: '/hero1.png', alt: 'Marketplace Banner 1' },
+  { id: 2, src: '/hero2.png', alt: 'Marketplace Banner 2' },
+  { id: 3, src: '/hero3.png', alt: 'Marketplace Banner 3' },
+  { id: 4, src: '/hero4.png', alt: 'Marketplace Banner 4' },
+  { id: 5, src: '/hero5.png', alt: 'Marketplace Banner 5' },
 ];
 
 const AUTOPLAY_INTERVAL = 4500;
