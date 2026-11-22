@@ -77,22 +77,22 @@ export const RazorpaySimulatorModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md rounded-2xl bg-card border border-border p-6 shadow-2xl space-y-4">
+      <DialogContent className="max-w-md rounded-3xl bg-card border border-border/60 p-6 shadow-2xl space-y-4">
         {/* Header with Razorpay mockup branding */}
-        <DialogHeader className="border-b border-border pb-3">
+        <DialogHeader className="border-b border-border/60 pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-xs">
                 <CreditCard size={18} />
               </div>
               <div>
-                <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                <DialogTitle className="text-base font-black text-foreground font-heading flex items-center gap-2">
                   <span>Razorpay Checkout</span>
-                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-                    Mock Sandbox
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 rounded-full font-bold">
+                    Sandbox
                   </Badge>
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground font-mono">
                   Order #{order.order_number}
                 </DialogDescription>
               </div>
@@ -101,18 +101,18 @@ export const RazorpaySimulatorModal = ({
         </DialogHeader>
 
         {/* Amount to pay */}
-        <div className="rounded-xl border border-border bg-muted/40 p-4 text-center space-y-1">
-          <span className="text-xs text-muted-foreground">Total Payable Amount</span>
+        <div className="rounded-2xl border border-border/60 bg-muted/30 p-5 text-center space-y-1">
+          <span className="text-xs font-semibold text-muted-foreground">Total Payable Amount</span>
           <div className="flex justify-center">
-            <PriceDisplay price={totalAmount} size="lg" className="text-2xl font-extrabold text-foreground" />
+            <PriceDisplay price={totalAmount} size="lg" className="text-3xl font-black text-foreground font-heading" />
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Test gateway environment — no real currency will be charged
+          <p className="text-[11px] text-muted-foreground pt-1">
+            Test gateway environment &bull; No real currency will be charged
           </p>
         </div>
 
         {errorStatus && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertTriangle size={15} className="shrink-0 mt-0.5" />
             <span>{errorStatus}</span>
           </div>
@@ -124,7 +124,7 @@ export const RazorpaySimulatorModal = ({
             type="button"
             onClick={() => handleSimulatePayment('successful')}
             disabled={isProcessing}
-            className="w-full h-11 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-sm gap-2 cursor-pointer"
+            className="w-full h-11 rounded-2xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-md shadow-primary/20 gap-2 cursor-pointer"
           >
             {isProcessing ? (
               <>
@@ -144,7 +144,7 @@ export const RazorpaySimulatorModal = ({
             variant="outline"
             onClick={() => handleSimulatePayment('failed')}
             disabled={isProcessing}
-            className="w-full h-10 rounded-xl font-semibold border-destructive/30 text-destructive hover:bg-destructive/10 text-xs gap-2 cursor-pointer"
+            className="w-full h-11 rounded-2xl font-semibold border-destructive/30 text-destructive hover:bg-destructive/10 text-xs gap-2 cursor-pointer"
           >
             <XCircle size={15} />
             <span>Simulate Payment Failure (Fail)</span>
@@ -162,7 +162,7 @@ export const RazorpaySimulatorModal = ({
           </div>
         </div>
 
-        <div className="pt-2 border-t border-border flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="pt-2 border-t border-border/60 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
           <ShieldCheck size={13} className="text-primary" />
           <span>Secured by 256-bit encryption</span>
         </div>

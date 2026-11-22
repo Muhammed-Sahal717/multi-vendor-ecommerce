@@ -8,6 +8,8 @@ import {
   Sparkles,
   ShieldCheck,
   AlertCircle,
+  Truck,
+  RotateCcw,
 } from 'lucide-react';
 import { useCart } from '../hooks/useCart.js';
 import { CartItem } from '../components/CartItem.jsx';
@@ -47,7 +49,9 @@ export const CartPage = () => {
     staleTime: 1000 * 60 * 5,
   });
 
-  const recommendedProducts = recommendationsData?.results || (Array.isArray(recommendationsData) ? recommendationsData : []);
+  const recommendedProducts =
+    recommendationsData?.results ||
+    (Array.isArray(recommendationsData) ? recommendationsData : []);
 
   const handleProceedToCheckout = () => {
     navigate(ROUTE_PATHS.STOREFRONT.CHECKOUT);
@@ -63,11 +67,11 @@ export const CartPage = () => {
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
               Sign In to View Your Cart
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Log in to access your saved items, view prices and discounts, and complete your purchase securely.
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Log in to access your saved items, view special seller discounts, and complete your purchase securely.
             </p>
           </div>
 
@@ -78,7 +82,7 @@ export const CartPage = () => {
                   state: { from: { pathname: ROUTE_PATHS.STOREFRONT.CART } },
                 })
               }
-              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6 rounded-xl font-bold cursor-pointer"
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6 rounded-2xl font-bold cursor-pointer shadow-md shadow-primary/20"
             >
               <LogIn size={16} />
               <span>Log In</span>
@@ -90,14 +94,14 @@ export const CartPage = () => {
                   state: { from: { pathname: ROUTE_PATHS.STOREFRONT.CART } },
                 })
               }
-              className="gap-2 h-11 px-6 rounded-xl font-semibold border-border hover:bg-muted cursor-pointer"
+              className="gap-2 h-11 px-6 rounded-2xl font-semibold border-border hover:bg-muted cursor-pointer"
             >
               <UserPlus size={16} />
               <span>Create Account</span>
             </Button>
           </div>
 
-          <div className="pt-4 border-t border-border">
+          <div className="pt-4 border-t border-border/60">
             <Link
               to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
@@ -111,24 +115,20 @@ export const CartPage = () => {
     );
   }
 
-  // 2. Non-customer role check (e.g., Seller or Admin logged in)
+  // 2. Non-customer role check (e.g. Seller or Admin logged in)
   if (!isCustomer) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <Card className="mx-auto max-w-lg p-8 text-center space-y-4 rounded-2xl border-border">
+        <Card className="mx-auto max-w-lg p-8 text-center space-y-4 rounded-3xl border border-border/70 bg-card shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <AlertCircle size={28} />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Customer Cart Only</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Shopping cart and checkout features are dedicated to customer accounts. Please log in with a customer account to make purchases.
+          <h2 className="text-xl font-bold text-foreground font-heading">Customer Cart Only</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            Shopping cart and checkout features are reserved for customer accounts. Please switch to a customer account to purchase.
           </p>
           <div className="pt-2">
-            <Button
-              asChild
-              variant="outline"
-              className="rounded-xl font-semibold"
-            >
+            <Button asChild variant="outline" className="rounded-2xl font-semibold">
               <Link to={ROUTE_PATHS.STOREFRONT.HOME}>Back to Storefront</Link>
             </Button>
           </div>
@@ -162,49 +162,51 @@ export const CartPage = () => {
   // 5. Empty Cart State
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-md text-center space-y-6">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-primary/10 text-primary shadow-xs">
-            <ShoppingBag size={48} className="stroke-[1.5]" />
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 space-y-12">
+        <div className="mx-auto max-w-md text-center space-y-5 pt-8">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/10 text-primary shadow-xs">
+            <ShoppingBag size={40} className="stroke-[1.5]" />
           </div>
 
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground font-heading">
               Your Cart is Empty
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Looks like you haven't added anything to your cart yet. Explore our handcrafted, authentic artisan collections!
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Looks like you haven&rsquo;t added anything to your cart yet. Explore our handcrafted, authentic artisan collections!
             </p>
           </div>
 
           <Button
             asChild
             size="lg"
-            className="rounded-xl font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-8 shadow-sm cursor-pointer"
+            className="rounded-2xl font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-8 shadow-md shadow-primary/25 cursor-pointer text-xs sm:text-sm"
           >
             <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>
               <Sparkles size={16} />
-              <span>Start Shopping</span>
+              <span>Explore Catalog</span>
             </Link>
           </Button>
         </div>
 
         {/* Recommended Products for Empty State */}
         {recommendedProducts.length > 0 && (
-          <div className="mt-20 border-t border-border pt-12">
+          <div className="mt-16 border-t border-border/60 pt-10">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-foreground">Popular Picks You Might Like</h2>
-                <p className="text-xs text-muted-foreground">Hand-picked by our editors</p>
+                <h2 className="text-xl font-black tracking-tight text-foreground font-heading">
+                  Popular Handcrafted Picks
+                </h2>
+                <p className="text-xs text-muted-foreground">Handpicked selections by our marketplace curators</p>
               </div>
-              <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary">
+              <Button asChild variant="outline" size="sm" className="rounded-full text-xs font-semibold border-border/80 hover:border-primary/40">
                 <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>View All</Link>
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-5">
               {recommendedProducts.slice(0, 4).map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} />
+                <ProductCard key={product.id || product.slug} product={product} index={index} />
               ))}
             </div>
           </div>
@@ -215,28 +217,52 @@ export const CartPage = () => {
 
   // 6. Active Cart View
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-8">
+      {/* Commerce Stepper Bar */}
+      <div className="flex items-center justify-center gap-2 sm:gap-4 py-2 border-b border-border/60 pb-5">
+        <div className="flex items-center gap-2 text-xs font-bold text-primary">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-black shadow-xs">
+            1
+          </span>
+          <span>Shopping Cart</span>
+        </div>
+        <div className="h-px w-6 sm:w-14 bg-border/80" />
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-card text-[11px]">
+            2
+          </span>
+          <span>Checkout</span>
+        </div>
+        <div className="h-px w-6 sm:w-14 bg-border/80" />
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-card text-[11px]">
+            3
+          </span>
+          <span>Order Confirmation</span>
+        </div>
+      </div>
+
+      {/* Header Toolbar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
+            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
               Shopping Cart
             </h1>
-            <span className="inline-flex items-center rounded-full border border-border/80 bg-card px-3 py-0.5 text-xs font-bold text-foreground shadow-2xs">
+            <span className="inline-flex items-center rounded-full border border-border/70 bg-card px-3 py-0.5 text-xs font-bold text-foreground shadow-2xs">
               {totalItems} {totalItems === 1 ? 'item' : 'items'}
             </span>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-            Review your selected artisan products before proceeding to secure checkout.
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Review your selected items before proceeding to secure checkout.
           </p>
         </div>
 
         <Link
           to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
-          className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 shadow-2xs transition-all w-fit"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={13} />
           <span>Continue Shopping</span>
         </Link>
       </div>
@@ -244,7 +270,7 @@ export const CartPage = () => {
       {/* Main Two-Column Grid */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
         {/* Left Column: Cart Items List */}
-        <div className="space-y-4 lg:col-span-8">
+        <div className="space-y-3.5 lg:col-span-8">
           {items.map((item) => (
             <CartItem
               key={item.id}
@@ -258,12 +284,28 @@ export const CartPage = () => {
             />
           ))}
 
-          {/* Guarantee info card */}
-          <div className="mt-6 rounded-3xl border border-border/60 bg-muted/20 p-4 sm:p-5 flex items-center gap-3.5 text-xs text-muted-foreground">
-            <ShieldCheck size={20} className="text-primary shrink-0 stroke-[2]" />
-            <p className="leading-relaxed">
-              All orders are protected by our <span className="font-bold text-foreground">Buyer Protection Program</span>. If an item arrives damaged or not as described, return it within 7 days for a hassle-free refund.
-            </p>
+          {/* Guarantee / Buyer Protection Strip */}
+          <div className="mt-4 rounded-3xl border border-border/60 bg-muted/20 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-card border border-border/60 text-accent shadow-2xs shrink-0">
+                <ShieldCheck size={18} className="stroke-[2]" />
+              </div>
+              <p className="leading-relaxed">
+                All purchases covered by our <strong className="text-foreground">Buyer Protection Program</strong>. Easy 7-day replacements directly with verified sellers.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4 shrink-0 text-[11px] font-semibold text-foreground/80 pl-12 sm:pl-0">
+              <span className="flex items-center gap-1">
+                <Truck size={13} className="text-primary" />
+                <span>Fast COD</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <RotateCcw size={13} className="text-emerald-500" />
+                <span>7-Day Return</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -286,16 +328,16 @@ export const CartPage = () => {
               <h2 className="text-xl font-black tracking-tight text-foreground font-heading">
                 You Might Also Like
               </h2>
-              <p className="text-xs text-muted-foreground">Popular recommendations from verified sellers</p>
+              <p className="text-xs text-muted-foreground">Recommended artisanal crafts from our marketplace</p>
             </div>
-            <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary">
+            <Button asChild variant="outline" size="sm" className="rounded-full text-xs font-semibold border-border/80 hover:border-primary/40">
               <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>Explore More</Link>
             </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-5">
             {recommendedProducts.slice(0, 4).map((product, index) => (
-              <ProductCard key={product.id} product={product} index={index} />
+              <ProductCard key={product.id || product.slug} product={product} index={index} />
             ))}
           </div>
         </div>

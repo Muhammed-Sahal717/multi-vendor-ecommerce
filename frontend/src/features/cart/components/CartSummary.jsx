@@ -1,4 +1,4 @@
-import { ArrowRight, ShieldCheck, Truck, Lock, AlertCircle, Sparkles } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Truck, Lock, AlertCircle, RotateCcw } from 'lucide-react';
 import { Card } from '../../../components/ui/card.jsx';
 import { Button } from '../../../components/ui/button.jsx';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
@@ -20,39 +20,48 @@ export const CartSummary = ({
   const progressPercent = Math.min(100, Math.round((totalPrice / FREE_SHIPPING_THRESHOLD) * 100));
 
   return (
-    <Card className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm sticky top-24 space-y-6">
+    <Card className="rounded-3xl border border-border/60 bg-card p-6 shadow-sm sticky top-24 space-y-5">
       <div className="flex items-center justify-between border-b border-border/60 pb-4">
-        <h2 className="text-lg font-bold text-foreground">Order Summary</h2>
-        <span className="text-xs font-semibold text-muted-foreground">
+        <h2 className="text-base font-bold text-foreground font-heading">Order Summary</h2>
+        <span className="inline-flex items-center rounded-full border border-border/80 bg-muted/30 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
           {totalItems} {totalItems === 1 ? 'item' : 'items'}
         </span>
       </div>
 
-      {/* Free Shipping Progress Indicator */}
+      {/* Free Delivery Progress Indicator */}
       {totalPrice > 0 && (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-          <div className="flex items-center justify-between text-xs font-medium">
-            <span className="flex items-center gap-1.5 text-primary font-bold">
-              <Sparkles size={14} className="text-primary" />
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 font-bold">
               {isFreeShipping ? (
-                'You unlocked FREE Delivery!'
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Truck size={14} className="text-emerald-500" />
+                  <span>You unlocked FREE Delivery!</span>
+                </span>
               ) : (
-                <>Add <span className="text-primary font-bold">₹{amountNeededForFreeShipping.toFixed(0)}</span> more for Free Delivery</>
+                <span className="text-foreground flex items-center gap-1.5">
+                  <Truck size={14} className="text-primary" />
+                  <span>
+                    Add <strong className="text-primary">₹{amountNeededForFreeShipping.toFixed(0)}</strong> for Free Delivery
+                  </span>
+                </span>
               )}
             </span>
             <span className="font-bold text-muted-foreground">{progressPercent}%</span>
           </div>
 
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/20">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/60">
             <div
-              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              className={`h-full rounded-full transition-all duration-500 ease-out ${
+                isFreeShipping ? 'bg-emerald-500' : 'bg-primary'
+              }`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
       )}
 
-      {/* Price Breakdown */}
+      {/* Price Calculations */}
       <div className="space-y-3 text-xs sm:text-sm">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Items Subtotal</span>
@@ -63,23 +72,18 @@ export const CartSummary = ({
           <span>Shipping & Handling</span>
           {shippingFee === 0 ? (
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Free
+              Free Delivery
             </span>
           ) : (
             <PriceDisplay price={shippingFee} priceClassName="font-semibold text-foreground text-xs sm:text-sm" />
           )}
         </div>
 
-        <div className="flex items-center justify-between text-muted-foreground">
-          <span>Taxes</span>
-          <span className="text-xs font-medium text-muted-foreground">Included in MRP</span>
-        </div>
-
-        <div className="border-t border-border/60 pt-4">
+        <div className="border-t border-border/60 pt-3">
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-base font-black text-foreground font-heading">Total Amount</span>
-              <p className="text-[11px] text-muted-foreground">All taxes included</p>
+              <span className="text-base font-black text-foreground font-heading">Total Payable</span>
+              <p className="text-[11px] text-muted-foreground">Free delivery on orders over ₹999</p>
             </div>
             <PriceDisplay
               price={finalTotal}
@@ -99,7 +103,7 @@ export const CartSummary = ({
         </div>
       )}
 
-      {/* Checkout Button */}
+      {/* Checkout Action Button */}
       <Button
         type="button"
         size="lg"
@@ -111,19 +115,23 @@ export const CartSummary = ({
         <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
       </Button>
 
-      {/* Trust Badges */}
-      <div className="space-y-2 border-t border-border/60 pt-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <Lock size={13} className="text-primary shrink-0" />
-          <span>256-bit encrypted checkout</span>
+      {/* Trust Badges Strip */}
+      <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-4 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <Lock size={12} className="text-accent shrink-0" />
+          <span>256-bit Encrypted</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Truck size={13} className="text-primary shrink-0" />
-          <span>Cash on Delivery (COD) supported</span>
+        <div className="flex items-center gap-1.5">
+          <Truck size={12} className="text-primary shrink-0" />
+          <span>Cash on Delivery</span>
         </div>
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={13} className="text-primary shrink-0" />
-          <span>100% Genuine and authentic items</span>
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck size={12} className="text-accent shrink-0" />
+          <span>100% Genuine</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <RotateCcw size={12} className="text-emerald-500 shrink-0" />
+          <span>7-Day Return</span>
         </div>
       </div>
     </Card>
