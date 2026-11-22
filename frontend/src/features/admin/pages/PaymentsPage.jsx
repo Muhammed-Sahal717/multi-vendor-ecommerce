@@ -48,16 +48,17 @@ export const PaymentsPage = () => {
 
   // COD confirmation alert dialog state
   const [paymentToConfirm, setPaymentToConfirm] = useState(null);
+  const [confirmError, setConfirmError] = useState('');
 
   // Fetch payments
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.payments.adminList({
-      payment_method: selectedMethod || undefined,
+      method: selectedMethod || undefined,
       search: searchQuery || undefined,
     }),
     queryFn: () =>
       adminService.getPayments({
-        payment_method: selectedMethod || undefined,
+        method: selectedMethod || undefined,
         search: searchQuery || undefined,
       }),
   });
@@ -68,15 +69,43 @@ export const PaymentsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       setPaymentToConfirm(null);
+      setConfirmError('');
+    },
+    onError: (err) => {
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to confirm COD collection. Ensure the order has been delivered.';
+      setConfirmError(msg);
     },
   });
 
   const rawPayments = Array.isArray(data) ? data : data?.results || [];
+
+  const getOrderNumber = (pmt) => {
+    if (pmt?.order_number) return pmt.order_number;
+    if (typeof pmt?.order === 'object' && pmt?.order !== null) {
+      return pmt.order.order_number || pmt.order.id?.slice(0, 8) || 'N/A';
+    }
+    if (typeof pmt?.order === 'string') return pmt.order.slice(0, 8);
+    return 'N/A';
+  };
+
+  const getOrderId = (pmt) => {
+    if (pmt?.order_id) return pmt.order_id;
+    if (typeof pmt?.order === 'object' && pmt?.order !== null) {
+      return pmt.order.id;
+    }
+    if (typeof pmt?.order === 'string') return pmt.order;
+    return null;
+  };
+
   const payments = rawPayments.filter((pmt) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const id = (pmt.id || '').toString().toLowerCase();
-    const orderNum = (pmt.order_number || pmt.order || '').toString().toLowerCase();
+    const orderNum = (getOrderNumber(pmt) || '').toString().toLowerCase();
     const ref = (pmt.transaction_reference || pmt.razorpay_payment_id || '').toLowerCase();
     const email = (pmt.customer_email || pmt.user?.email || '').toLowerCase();
     return id.includes(q) || orderNum.includes(q) || ref.includes(q) || email.includes(q);
@@ -90,6 +119,7 @@ export const PaymentsPage = () => {
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
       case 'completed':
+      case 'successful':
       case 'success':
       case 'paid':
         return (
@@ -204,8 +234,8 @@ export const PaymentsPage = () => {
       ) : (
         <div className="space-y-3">
           {payments.map((pmt) => {
-            const isCod = pmt.payment_method?.toLowerCase() === 'cod';
-            const isCompleted = ['completed', 'success', 'paid'].includes(pmt.status?.toLowerCase());
+            const isCod = (pmt.method || pmt.payment_method)?.toLowerCase() === 'cod';
+            const isCompleted = ['completed', 'successful', 'success', 'paid'].includes(pmt.status?.toLowerCase());
             const needsCodConfirm = isCod && !isCompleted;
 
             return (
@@ -245,12 +275,18 @@ export const PaymentsPage = () => {
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span>
                         Order:{' '}
-                        <Link
-                          to={ROUTE_PATHS.ADMIN.ORDER_DETAILS(pmt.order || pmt.order_id)}
-                          className="font-bold text-foreground hover:underline"
-                        >
-                          #{pmt.order_number || pmt.order || 'N/A'}
-                        </Link>
+                        {getOrderId(pmt) ? (
+                          <Link
+                            to={ROUTE_PATHS.ADMIN.ORDER_DETAILS(getOrderId(pmt))}
+                            className="font-bold text-foreground hover:underline"
+                          >
+                            #{getOrderNumber(pmt)}
+                          </Link>
+                        ) : (
+                          <span className="font-bold text-foreground">
+                            #{getOrderNumber(pmt)}
+                          </span>
+                        )}
                       </span>
                       <span>•</span>
                       <span>{pmt.customer_email || pmt.user?.email || 'Customer'}</span>
@@ -273,7 +309,10 @@ export const PaymentsPage = () => {
                     {needsCodConfirm && (
                       <Button
                         size="sm"
-                        onClick={() => setPaymentToConfirm(pmt)}
+                        onClick={() => {
+                          setConfirmError('');
+                          setPaymentToConfirm(pmt);
+                        }}
                         className="rounded-xl font-bold bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-3 gap-1 shadow-2xs cursor-pointer"
                       >
                         <Check size={13} />
@@ -301,7 +340,15 @@ export const PaymentsPage = () => {
       )}
 
       {/* Confirm COD Alert Dialog */}
-      <AlertDialog open={!!paymentToConfirm} onOpenChange={(open) => !open && setPaymentToConfirm(null)}>
+      <AlertDialog
+        open={!!paymentToConfirm}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentToConfirm(null);
+            setConfirmError('');
+          }
+        }}
+      >
         <AlertDialogContent className="rounded-2xl bg-card border-border sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base font-extrabold text-foreground flex items-center gap-2">
@@ -311,9 +358,17 @@ export const PaymentsPage = () => {
             <AlertDialogDescription className="text-xs text-muted-foreground">
               Confirm that cash of{' '}
               <strong className="text-foreground">₹{paymentToConfirm?.amount}</strong> for Order #
-              {paymentToConfirm?.order_number || paymentToConfirm?.order} has been physically collected from the customer by courier and deposited into platform accounts.
+              {getOrderNumber(paymentToConfirm)} has been physically collected from the customer by courier and deposited into platform accounts.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {confirmError && (
+            <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-2.5 text-xs text-destructive font-medium flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{confirmError}</span>
+            </div>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-xl text-xs cursor-pointer">Cancel</AlertDialogCancel>
             <AlertDialogAction

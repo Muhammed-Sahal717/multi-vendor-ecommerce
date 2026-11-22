@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Monitor,
@@ -11,6 +12,9 @@ import {
   Gem,
   Palette,
   Footprints,
+  Trophy,
+  Gamepad2,
+  Car,
   Layers,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
@@ -128,25 +132,53 @@ const renderCategoryIcon = (category) => {
     return <Palette {...iconProps} />;
   }
 
+  // Sports, fitness, gym, outdoor & athletics
+  if (
+    text.includes('sport') ||
+    text.includes('fit') ||
+    text.includes('gym') ||
+    text.includes('athlet') ||
+    text.includes('outdoor') ||
+    text.includes('yoga')
+  ) {
+    return <Trophy {...iconProps} />;
+  }
+
+  // Gaming & toys
+  if (text.includes('game') || text.includes('gaming') || text.includes('toy')) {
+    return <Gamepad2 {...iconProps} />;
+  }
+
+  // Automotive & vehicles
+  if (text.includes('auto') || text.includes('car') || text.includes('bike') || text.includes('vehicle')) {
+    return <Car {...iconProps} />;
+  }
+
   return <Layers {...iconProps} />;
 };
 
 export const CategoryCard = ({ category }) => {
   const { name, slug, image } = category || {};
-  const imageUrl = getMediaUrl(image);
+  const [imageError, setImageError] = useState(false);
+  const imageUrl = !imageError ? getMediaUrl(image) : null;
 
   return (
     <Link
-      to={ROUTE_PATHS.STOREFRONT.CATEGORY_PRODUCTS(slug)}
+      to={`${ROUTE_PATHS.STOREFRONT.PRODUCTS}?category=${encodeURIComponent(slug || '')}`}
       className="group flex flex-col items-center justify-center shrink-0 focus:outline-hidden select-none"
       title={name}
     >
       {/* Small & cute 3D gradient elevating circular button */}
       <div
-        className="relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-gradient-to-b from-card via-card to-muted/60 border border-border border-t-white/80 dark:border-t-white/15 ring-1 ring-inset ring-white/40 dark:ring-white/5 shadow-[0_3.5px_0_0_hsl(var(--border)),0_6px_10px_-2px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 hover:shadow-[0_5px_0_0_hsl(var(--border)),0_10px_16px_-2px_rgba(0,0,0,0.1)] active:translate-y-1 active:shadow-[0_1px_0_0_hsl(var(--border))] transition-all duration-200 cursor-pointer"
+        className="relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-gradient-to-b from-card via-card to-muted/60 border border-border border-t-white/80 dark:border-t-white/15 ring-1 ring-inset ring-white/40 dark:ring-white/5 shadow-[0_3.5px_0_0_hsl(var(--border)),0_6px_10px_-2px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 hover:shadow-[0_5px_0_0_hsl(var(--border)),0_10px_16px_-2px_rgba(0,0,0,0.1)] active:translate-y-1 active:shadow-[0_1px_0_0_hsl(var(--border))] transition-all duration-200 cursor-pointer overflow-hidden p-1.5"
       >
         {imageUrl ? (
-          <img src={imageUrl} alt={name} className="h-7 w-7 sm:h-8 sm:w-8 rounded-full object-cover" />
+          <img
+            src={imageUrl}
+            alt={name}
+            onError={() => setImageError(true)}
+            className="h-full w-full rounded-full object-contain transition-transform duration-200 group-hover:scale-110"
+          />
         ) : (
           renderCategoryIcon(category)
         )}

@@ -36,10 +36,10 @@ export const useAuthStore = create(
       },
 
       setUser: (user) => {
-        set({
-          user,
-          role: user?.role || null,
-        });
+        set((state) => ({
+          user: user ? (state.user ? { ...state.user, ...user } : user) : null,
+          role: user?.role || state.role || null,
+        }));
       },
 
       logout: () => {

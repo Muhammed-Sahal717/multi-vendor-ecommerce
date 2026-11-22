@@ -10,6 +10,7 @@ class Category(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=120, unique=True)
     description = models.TextField(blank=True)
+    image = models.ImageField(upload_to="categories/", null=True, blank=True)
 
     parent = models.ForeignKey(
         "self",

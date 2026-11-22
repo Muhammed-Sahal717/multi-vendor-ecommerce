@@ -20,7 +20,7 @@ import { useAuth } from '../../../context/AuthProvider.jsx';
 import { queryKeys } from '../../../lib/queryClient.js';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
 import { ROLES } from '../../../lib/constants.js';
-import { getMediaUrl } from '../../../lib/utils.js';
+import { getUserAvatarUrl } from '../../../lib/utils.js';
 import { Card } from '../../../components/ui/card.jsx';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
@@ -42,6 +42,8 @@ export const ProfilePage = () => {
 
   const [formSuccess, setFormSuccess] = useState('');
   const [formError, setFormError] = useState('');
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [imgLoadError, setImgLoadError] = useState(false);
 
   // Seller application modal state
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
@@ -121,13 +123,36 @@ export const ProfilePage = () => {
   // Upload profile image mutation
   const uploadImageMutation = useMutation({
     mutationFn: (file) => authService.uploadAvatar(file),
-    onSuccess: () => {
+    onSuccess: (updatedData) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile() });
-      setFormSuccess('Profile image uploaded!');
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.me() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.all });
+      if (updatedData && typeof updatedData === 'object' && updateUser) {
+        updateUser(updatedData);
+      }
+      setFormSuccess('Profile picture updated successfully!');
+      setFormError('');
+      setImgLoadError(false);
       setTimeout(() => setFormSuccess(''), 3000);
     },
     onError: (err) => {
-      setFormError(err?.message || 'Failed to upload profile picture.');
+      setPreviewUrl(null);
+      const data = err?.response?.data;
+      let errMsg = 'Failed to upload profile picture.';
+      if (typeof data === 'string') {
+        errMsg = data;
+      } else if (data?.detail) {
+        errMsg = data.detail;
+      } else if (data?.message) {
+        errMsg = data.message;
+      } else if (typeof data === 'object') {
+        const firstKey = Object.keys(data)[0];
+        const val = Array.isArray(data[firstKey]) ? data[firstKey][0] : data[firstKey];
+        errMsg = `${firstKey}: ${val}`;
+      } else if (err?.message) {
+        errMsg = err.message;
+      }
+      setFormError(errMsg);
     },
   });
 
@@ -159,9 +184,35 @@ export const ProfilePage = () => {
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      uploadImageMutation.mutate(file);
+    if (!file) return;
+
+    // Validate type
+    const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'];
+    if (!validMimes.includes(file.type) && !file.type.startsWith('image/')) {
+      setFormError('Please select a valid image file (JPG, PNG, or WEBP).');
+      return;
     }
+
+    // Validate size (5MB max)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setFormError('Image size exceeds 5MB limit. Please select a smaller photo.');
+      return;
+    }
+
+    setFormError('');
+    setFormSuccess('');
+    setImgLoadError(false);
+
+    // Optimistic instant preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+
+    // Upload
+    uploadImageMutation.mutate(file);
+
+    // Reset input so re-selecting same file triggers change
+    e.target.value = '';
   };
 
   const handleSellerSubmit = (e) => {
@@ -183,7 +234,9 @@ export const ProfilePage = () => {
     sellerApplicationMutation.mutate(sellerFormData);
   };
 
-  const profileImageUrl = getMediaUrl(profile?.profile_image);
+  const profileImageUrl =
+    previewUrl ||
+    (!imgLoadError ? getUserAvatarUrl(profile) || getUserAvatarUrl(user) : null);
   const isSeller = role === ROLES.SELLER;
 
   return (
@@ -254,17 +307,43 @@ export const ProfilePage = () => {
         {/* Avatar Upload Header */}
         <div className="flex items-center gap-5">
           <div className="relative group">
-            <div className="flex h-20 w-20 overflow-hidden items-center justify-center rounded-2xl border-2 border-border bg-muted/40 text-xl font-bold text-foreground shadow-2xs">
+            <label
+              htmlFor="avatar-upload"
+              className="flex h-20 w-20 overflow-hidden items-center justify-center rounded-2xl border-2 border-border/80 bg-muted/40 text-xl font-bold text-foreground shadow-2xs cursor-pointer hover:border-primary/60 transition-all relative block"
+              title="Click to change profile picture"
+            >
               {profileImageUrl ? (
                 <img
                   src={profileImageUrl}
                   alt="Profile"
+                  onError={() => setImgLoadError(true)}
                   className="h-full w-full object-cover object-center"
                 />
               ) : (
-                <span>{user?.first_name ? user.first_name[0].toUpperCase() : 'U'}</span>
+                <span>
+                  {user?.first_name
+                    ? user.first_name[0].toUpperCase()
+                    : user?.email
+                      ? user.email[0].toUpperCase()
+                      : 'U'}
+                </span>
               )}
-            </div>
+
+              {/* Uploading Spinner Overlay */}
+              {uploadImageMutation.isPending && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-2xs flex items-center justify-center">
+                  <Loader2 size={22} className="animate-spin text-primary" />
+                </div>
+              )}
+
+              {/* Hover Overlay */}
+              {!uploadImageMutation.isPending && (
+                <div className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera size={18} />
+                  <span className="text-[10px] font-bold mt-0.5">Change</span>
+                </div>
+              )}
+            </label>
 
             <label
               htmlFor="avatar-upload"
@@ -275,7 +354,7 @@ export const ProfilePage = () => {
               <input
                 id="avatar-upload"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
                 onChange={handleImageChange}
                 className="hidden"
                 disabled={uploadImageMutation.isPending}
@@ -286,10 +365,17 @@ export const ProfilePage = () => {
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-foreground">Profile Picture</h3>
             <p className="text-xs text-muted-foreground">JPG, PNG or WEBP up to 5MB.</p>
-            {uploadImageMutation.isPending && (
+            {uploadImageMutation.isPending ? (
               <span className="text-[11px] text-primary flex items-center gap-1 font-semibold">
                 <Loader2 size={12} className="animate-spin" /> Uploading image...
               </span>
+            ) : (
+              <label
+                htmlFor="avatar-upload"
+                className="inline-block text-[11px] font-bold text-primary hover:underline cursor-pointer"
+              >
+                Upload New Photo
+              </label>
             )}
           </div>
         </div>

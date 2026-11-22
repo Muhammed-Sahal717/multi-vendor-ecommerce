@@ -41,10 +41,26 @@ export const EarningsPage = () => {
   });
 
   // Calculate platform totals
-  const totalGmv = sellersEarnings.reduce((acc, s) => acc + (Number(s.gross_sales || s.total_sales || s.gmv) || 0), 0);
-  const totalCommission = sellersEarnings.reduce((acc, s) => acc + (Number(s.commission || s.total_commission) || 0), 0);
-  const totalNet = sellersEarnings.reduce((acc, s) => acc + (Number(s.net_earnings || s.total_net) || 0), 0);
-  const totalPending = sellersEarnings.reduce((acc, s) => acc + (Number(s.pending_balance || s.outstanding_balance) || 0), 0);
+  const totalGmv = sellersEarnings.reduce(
+    (acc, s) => acc + (Number(s.total_gross_earnings ?? s.gross_sales ?? s.total_sales ?? s.gmv) || 0),
+    0
+  );
+  const totalCommission = sellersEarnings.reduce(
+    (acc, s) => acc + (Number(s.total_commission_deducted ?? s.commission ?? s.total_commission) || 0),
+    0
+  );
+  const totalNet = sellersEarnings.reduce(
+    (acc, s) => acc + (Number(s.total_net_earnings ?? s.net_earnings ?? s.total_net) || 0),
+    0
+  );
+  const totalPaid = sellersEarnings.reduce(
+    (acc, s) => acc + (Number(s.already_paid) || 0),
+    0
+  );
+  const totalPending = sellersEarnings.reduce(
+    (acc, s) => acc + (Number(s.pending_payout_balance ?? s.pending_balance ?? s.outstanding_balance) || 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -77,8 +93,8 @@ export const EarningsPage = () => {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5 border-border bg-card shadow-2xs space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-2">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
             <span>Platform GMV</span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -89,7 +105,7 @@ export const EarningsPage = () => {
           <p className="text-[11px] text-muted-foreground">Cumulative gross sales value</p>
         </Card>
 
-        <Card className="p-5 border-border bg-card shadow-2xs space-y-2">
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-2">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
             <span>Commissions Retained</span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
@@ -100,9 +116,9 @@ export const EarningsPage = () => {
           <p className="text-[11px] text-muted-foreground">Platform revenue from seller fees</p>
         </Card>
 
-        <Card className="p-5 border-border bg-card shadow-2xs space-y-2">
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-2">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
-            <span>Net Artisan Earnings</span>
+            <span>Net Artisan Share</span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
               <Store size={16} />
             </div>
@@ -111,9 +127,20 @@ export const EarningsPage = () => {
           <p className="text-[11px] text-muted-foreground">Total payout share for artisans</p>
         </Card>
 
-        <Card className="p-5 border-border bg-card shadow-2xs space-y-2">
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-2">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
-            <span>Pending Payouts Balance</span>
+            <span>Disbursed to Date</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
+              <Receipt size={16} />
+            </div>
+          </div>
+          <PriceDisplay price={totalPaid} size="xl" />
+          <p className="text-[11px] text-muted-foreground">Settled bank transfers</p>
+        </Card>
+
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-2">
+          <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
+            <span>Pending Payouts</span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
               <Receipt size={16} />
             </div>
@@ -171,50 +198,65 @@ export const EarningsPage = () => {
                   <th className="py-3 px-4 text-right">Gross GMV</th>
                   <th className="py-3 px-4 text-right">Commission</th>
                   <th className="py-3 px-4 text-right">Net Share</th>
+                  <th className="py-3 px-4 text-right">Disbursed</th>
                   <th className="py-3 px-4 text-right">Pending Balance</th>
                   <th className="py-3 px-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {sellersEarnings.map((seller, idx) => (
-                  <tr key={seller.id || seller.seller_id || idx} className="hover:bg-muted/20 transition-colors">
-                    <td className="py-3 px-4">
-                      <Link
-                        to={ROUTE_PATHS.ADMIN.SELLER_DETAILS(seller.id || seller.seller_id)}
-                        className="font-bold text-foreground hover:text-primary transition-colors block"
-                      >
-                        {seller.store_name || seller.seller_name || 'Artisan Workshop'}
-                      </Link>
-                      <span className="text-[11px] text-muted-foreground">
-                        {seller.business_email || seller.email || ''}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium">
-                      ₹{seller.gross_sales || seller.total_sales || '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-emerald-600">
-                      ₹{seller.commission || seller.total_commission || '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-foreground">
-                      ₹{seller.net_earnings || seller.total_net || '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-amber-600">
-                      ₹{seller.pending_balance || seller.outstanding_balance || '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl text-xs h-7 px-2.5 font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        <Link to={`${ROUTE_PATHS.ADMIN.SELLER_PAYOUTS}?seller=${seller.id || seller.seller_id}`}>
-                          <span>Payouts</span>
+                {sellersEarnings.map((seller, idx) => {
+                  const sellerId = seller.seller_id || seller.id;
+                  const name = seller.business_name || seller.store_name || seller.seller_name || 'Artisan Workshop';
+                  const email = seller.business_email || seller.email || '';
+                  const gross = seller.total_gross_earnings ?? seller.gross_sales ?? seller.total_sales ?? '0.00';
+                  const comm = seller.total_commission_deducted ?? seller.commission ?? seller.total_commission ?? '0.00';
+                  const net = seller.total_net_earnings ?? seller.net_earnings ?? seller.total_net ?? '0.00';
+                  const paid = seller.already_paid ?? '0.00';
+                  const pending = seller.pending_payout_balance ?? seller.pending_balance ?? seller.outstanding_balance ?? '0.00';
+
+                  return (
+                    <tr key={sellerId || idx} className="hover:bg-muted/20 transition-colors">
+                      <td className="py-3 px-4">
+                        <Link
+                          to={ROUTE_PATHS.ADMIN.SELLER_DETAILS(sellerId)}
+                          className="font-bold text-foreground hover:text-primary transition-colors block"
+                        >
+                          {name}
                         </Link>
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                        <span className="text-[11px] text-muted-foreground">
+                          {email}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium">
+                        ₹{gross}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-emerald-600">
+                        ₹{comm}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-foreground">
+                        ₹{net}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-muted-foreground">
+                        ₹{paid}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-amber-600">
+                        ₹{pending}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl text-xs h-7 px-2.5 font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <Link to={`${ROUTE_PATHS.ADMIN.SELLER_PAYOUTS}?seller=${sellerId}`}>
+                            <span>Payouts</span>
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

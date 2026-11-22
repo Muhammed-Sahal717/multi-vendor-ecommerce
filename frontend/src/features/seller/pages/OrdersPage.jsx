@@ -20,6 +20,7 @@ import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 
 const STATUS_FILTERS = [
   { label: 'All Orders', value: '' },
+  { label: 'Pending', value: 'pending' },
   { label: 'Confirmed', value: 'confirmed' },
   { label: 'Processing', value: 'processing' },
   { label: 'Shipped', value: 'shipped' },
@@ -46,9 +47,13 @@ export const OrdersPage = () => {
     },
   });
 
-  const orders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
+  const rawOrders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
+  const orders = selectedStatus
+    ? rawOrders.filter((item) => (item.status || item.fulfillment_status || '').toLowerCase().trim() === selectedStatus.toLowerCase().trim())
+    : rawOrders;
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (rawStatus) => {
+    const status = (rawStatus || '').toLowerCase().trim();
     switch (status) {
       case 'delivered':
         return <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 font-bold text-xs py-0.5">Delivered</Badge>;
@@ -58,6 +63,8 @@ export const OrdersPage = () => {
         return <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-xs py-0.5">Processing</Badge>;
       case 'confirmed':
         return <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-xs py-0.5">Confirmed</Badge>;
+      case 'pending':
+        return <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 text-orange-600 font-bold text-xs py-0.5">Pending</Badge>;
       case 'cancelled':
         return <Badge variant="destructive" className="font-bold text-xs py-0.5">Cancelled</Badge>;
       default:
@@ -65,8 +72,10 @@ export const OrdersPage = () => {
     }
   };
 
-  const getNextAction = (status) => {
-    if (status === 'confirmed') return { next: 'processing', label: 'Mark Processing' };
+  const getNextAction = (rawStatus) => {
+    const status = (rawStatus || '').toLowerCase().trim();
+    if (status === 'pending') return { next: 'confirmed', label: 'Confirm Order' };
+    if (status === 'confirmed') return { next: 'processing', label: 'Start Processing' };
     if (status === 'processing') return { next: 'shipped', label: 'Mark Shipped' };
     if (status === 'shipped') return { next: 'delivered', label: 'Mark Delivered' };
     return null;
@@ -139,7 +148,10 @@ export const OrdersPage = () => {
       {/* Order Items Cards */}
       <div className="space-y-4">
         {orders.map((item) => {
-          const action = getNextAction(item.status);
+          const currentStatus = (item.status || item.fulfillment_status || 'pending').toLowerCase().trim();
+          const action = getNextAction(currentStatus);
+          const isItemPendingMutation = updateStatusMutation.isPending && updateStatusMutation.variables?.id === item.id;
+
           return (
             <Card
               key={item.id}
@@ -148,9 +160,9 @@ export const OrdersPage = () => {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/80 pb-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-mono text-sm font-bold text-foreground">
-                    #{item.order_number || item.order?.slice(0, 8)}
+                    #{item.order_number || (typeof item.order === 'object' && item.order !== null ? item.order.order_number || item.order.id?.slice(0, 8) : item.order?.slice?.(0, 8)) || item.id?.slice(0, 8)}
                   </span>
-                  {getStatusBadge(item.status)}
+                  {getStatusBadge(currentStatus)}
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Calendar size={12} />
                     {item.order_date
@@ -203,10 +215,14 @@ export const OrdersPage = () => {
                     type="button"
                     size="sm"
                     onClick={() => updateStatusMutation.mutate({ id: item.id, status: action.next })}
-                    disabled={updateStatusMutation.isPending}
+                    disabled={isItemPendingMutation}
                     className="h-8 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-4 shadow-2xs cursor-pointer gap-1.5"
                   >
-                    <CheckCircle2 size={13} />
+                    {isItemPendingMutation ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={13} />
+                    )}
                     <span>{action.label}</span>
                   </Button>
                 )}

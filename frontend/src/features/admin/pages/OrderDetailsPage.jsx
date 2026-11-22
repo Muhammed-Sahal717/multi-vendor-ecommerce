@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ShoppingBag,
@@ -15,8 +16,10 @@ import {
   XCircle,
   AlertCircle,
   ShieldCheck,
+  Loader2,
 } from 'lucide-react';
 import { adminService } from '../services/adminService.js';
+import { sellerService } from '../../seller/services/sellerService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
 import { getProductImageUrl, formatDate } from '../../../lib/utils.js';
@@ -27,12 +30,48 @@ import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 
 export const OrderDetailsPage = () => {
   const { id } = useParams();
+  const queryClient = useQueryClient();
+  const [feedback, setFeedback] = useState({ text: '', type: '' });
 
   const { data: order, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.orders.adminDetail(id),
     queryFn: () => adminService.getOrder(id),
     enabled: !!id,
   });
+
+  const updateItemStatusMutation = useMutation({
+    mutationFn: ({ itemId, status }) => sellerService.updateFulfillmentStatus(itemId, status),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.adminDetail(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+      setFeedback({ text: `Item #${variables.itemId} status set to "${variables.status}"`, type: 'success' });
+      setTimeout(() => setFeedback({ text: '', type: '' }), 4000);
+    },
+    onError: (err) => {
+      setFeedback({ text: err?.response?.data?.detail || err?.message || 'Failed to update item status.', type: 'error' });
+      setTimeout(() => setFeedback({ text: '', type: '' }), 5000);
+    },
+  });
+
+  const getItemBadge = (rawStatus) => {
+    const status = (rawStatus || '').toLowerCase().trim();
+    switch (status) {
+      case 'delivered':
+        return <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 font-bold text-[11px] py-0.5">Delivered</Badge>;
+      case 'shipped':
+        return <Badge variant="outline" className="border-blue-500/40 bg-blue-500/10 text-blue-600 font-bold text-[11px] py-0.5">Shipped</Badge>;
+      case 'processing':
+        return <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-[11px] py-0.5">Processing</Badge>;
+      case 'confirmed':
+        return <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-[11px] py-0.5">Confirmed</Badge>;
+      case 'pending':
+        return <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 text-orange-600 font-bold text-[11px] py-0.5">Pending</Badge>;
+      case 'cancelled':
+        return <Badge variant="destructive" className="font-bold text-[11px] py-0.5">Cancelled</Badge>;
+      default:
+        return <Badge variant="outline" className="capitalize text-[11px] py-0.5">{status || 'Pending'}</Badge>;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -168,6 +207,20 @@ export const OrderDetailsPage = () => {
         </div>
       </Card>
 
+      {/* Feedback banner */}
+      {feedback.text && (
+        <div
+          className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+            feedback.type === 'error'
+              ? 'bg-destructive/10 text-destructive border border-destructive/20'
+              : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+          }`}
+        >
+          {feedback.type === 'error' ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
+          <span>{feedback.text}</span>
+        </div>
+      )}
+
       {/* Ordered Products Table */}
       <Card className="p-6 border-border bg-card shadow-2xs space-y-4">
         <div className="flex items-center justify-between border-b border-border/60 pb-3">
@@ -189,8 +242,11 @@ export const OrderDetailsPage = () => {
               const itemImg = getProductImageUrl(
                 item.product?.primary_image?.image || item.image || item.product?.image
               );
+              const currentItemStatus = (item.status || item.fulfillment_status || 'pending').toLowerCase().trim();
+              const isUpdating = updateItemStatusMutation.isPending && updateItemStatusMutation.variables?.itemId === item.id;
+
               return (
-                <div key={item.id || idx} className="py-3.5 flex items-center justify-between gap-4">
+                <div key={item.id || idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-muted/30">
                       {itemImg ? (
@@ -206,10 +262,13 @@ export const OrderDetailsPage = () => {
                       )}
                     </div>
 
-                    <div className="space-y-0.5">
-                      <h3 className="text-xs font-bold text-foreground">
-                        {item.product_title || item.title || item.product?.title || 'Artisan Product'}
-                      </h3>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xs font-bold text-foreground">
+                          {item.product_title || item.title || item.product?.title || 'Artisan Product'}
+                        </h3>
+                        {getItemBadge(currentItemStatus)}
+                      </div>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <Store size={11} className="text-primary/70" />
                         <span>{item.seller_name || item.seller?.store_name || 'Artisan Workshop'}</span>
@@ -220,12 +279,36 @@ export const OrderDetailsPage = () => {
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-[11px] text-muted-foreground block">Line Total</span>
-                    <PriceDisplay
-                      price={(item.quantity || 1) * (Number(item.price || item.unit_price) || 0)}
-                      size="sm"
-                    />
+                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <span className="text-[11px] text-muted-foreground block">Line Total</span>
+                      <PriceDisplay
+                        price={(item.quantity || 1) * (Number(item.price || item.unit_price) || 0)}
+                        size="sm"
+                      />
+                    </div>
+
+                    {/* Status update control for admin */}
+                    {item.id && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span className="text-[11px] text-muted-foreground font-medium">Status:</span>
+                        <select
+                          value={currentItemStatus}
+                          onChange={(e) => updateItemStatusMutation.mutate({ itemId: item.id, status: e.target.value })}
+                          disabled={isUpdating}
+                          aria-label={`Update fulfillment status for ${item.product_title || item.title || 'item'}`}
+                          className="h-7 text-[11px] rounded-lg border border-border bg-background px-2 font-medium text-foreground focus:border-primary focus:outline-hidden cursor-pointer"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="processing">Processing</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                        {isUpdating && <Loader2 size={12} className="animate-spin text-primary" />}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

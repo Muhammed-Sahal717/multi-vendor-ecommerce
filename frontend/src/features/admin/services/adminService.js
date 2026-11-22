@@ -28,15 +28,22 @@ export const adminService = {
 
   // Category Moderation
   createCategory: async (categoryData) => {
-    const response = await apiClient.post(API_ENDPOINTS.CATALOG.CATEGORIES, categoryData);
+    const isFormData = categoryData instanceof FormData;
+    const response = await apiClient.post(API_ENDPOINTS.CATALOG.CATEGORIES, categoryData, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
+    });
     return response.data;
   },
 
   updateCategory: async (slug, categoryData, isPartial = true) => {
     const method = isPartial ? 'patch' : 'put';
+    const isFormData = categoryData instanceof FormData;
     const response = await apiClient[method](
       API_ENDPOINTS.CATALOG.CATEGORY_DETAIL(slug),
-      categoryData
+      categoryData,
+      {
+        headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
+      }
     );
     return response.data;
   },
