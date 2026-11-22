@@ -96,7 +96,7 @@ export const LoginPage = () => {
   };
 
   return (
-    <Card className="rounded-3xl border-border bg-card p-8 shadow-xl text-card-foreground sm:p-10">
+    <Card className="rounded-3xl border border-border/80 bg-card/95 backdrop-blur-md p-8 shadow-2xl text-card-foreground sm:p-10">
       <div className="text-center">
         <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
           Welcome back
