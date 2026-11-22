@@ -17,9 +17,7 @@ import {
   PanelLeft,
   Menu,
   X,
-  Sparkles,
 } from 'lucide-react';
-import { Logo } from '../components/shared/Logo.jsx';
 import { useAuth } from '../context/AuthProvider.jsx';
 import { sellerService } from '../features/seller/services/sellerService.js';
 import { queryKeys } from '../lib/queryClient.js';
@@ -133,21 +131,38 @@ export const SellerLayout = () => {
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
-      {/* 1. DESKTOP SHRINKABLE SIDEBAR */}
+      {/* 1. DESKTOP SHRINKABLE SIDEBAR WITH SMOOTH TRANSITION */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-300 ease-in-out shrink-0 select-none relative z-30 ${
-          isCollapsed ? 'w-[72px]' : 'w-64'
+        className={`hidden lg:flex flex-col border-r border-border bg-card/95 backdrop-blur-md shrink-0 select-none relative z-30 transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width] overflow-hidden ${
+          isCollapsed ? 'w-[68px]' : 'w-64'
         }`}
       >
-        {/* Sidebar Header */}
-        <div className="h-16 flex items-center justify-between px-3.5 border-b border-border/80">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <Logo showText={!isCollapsed} textClassName="text-lg" />
-            {!isCollapsed && (
-              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px] font-bold py-0.5 px-1.5 shrink-0">
-                Studio
-              </Badge>
-            )}
+        {/* Sidebar Header (Typographic Brand - No Logo Image) */}
+        <div className="h-16 flex items-center justify-between px-3 border-b border-border/80 overflow-hidden shrink-0">
+          <div className="flex items-center min-w-0 overflow-hidden">
+            <Link
+              to={ROUTE_PATHS.SELLER.DASHBOARD}
+              className="flex items-center gap-2.5 font-heading tracking-wider uppercase font-black text-foreground overflow-hidden group"
+            >
+              {/* Monogram Box (Clean vector, no image) */}
+              {/* <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-sm shadow-xs select-none transition-transform duration-200 group-hover:scale-105">
+                G
+              </span> */}
+
+              {/* Collapsible Brand Text with smooth width/opacity transition */}
+              <div
+                className={`flex items-center gap-2 overflow-hidden whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                  isCollapsed ? 'max-w-0 opacity-0 pointer-events-none' : 'max-w-[140px] opacity-100'
+                }`}
+              >
+                <span className="text-base font-black tracking-tight text-foreground font-heading">
+                  GALLA<span className="text-primary">.</span>
+                </span>
+                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px] font-bold py-0.5 px-1.5 shrink-0">
+                  Studio
+                </Badge>
+              </div>
+            </Link>
           </div>
 
           <button
@@ -162,15 +177,22 @@ export const SellerLayout = () => {
         </div>
 
         {/* Sidebar Nav Items */}
-        <div className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-none">
+        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4 scrollbar-none">
           {SELLER_NAV_GROUPS.map((group, groupIdx) => (
             <div key={groupIdx} className="space-y-1">
-              {!isCollapsed ? (
-                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 pb-1">
+              {/* Section Header with smooth collapse */}
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                  isCollapsed ? 'max-h-0 opacity-0 mb-1' : 'max-h-6 opacity-100 pb-1 px-3'
+                }`}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 whitespace-nowrap">
                   {group.title}
                 </p>
-              ) : (
-                groupIdx > 0 && <div className="my-2 border-t border-border/50 mx-2" />
+              </div>
+
+              {isCollapsed && groupIdx > 0 && (
+                <div className="my-2 border-t border-border/40 mx-2 transition-opacity duration-300" />
               )}
 
               {group.items.map((item) => {
@@ -180,34 +202,37 @@ export const SellerLayout = () => {
                     key={item.path}
                     to={item.path}
                     end={item.path === ROUTE_PATHS.SELLER.DASHBOARD}
-                    title={isCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
-                      isCollapsed
-                        ? `relative flex items-center justify-center h-10 w-10 mx-auto rounded-xl transition-all group cursor-pointer ${
-                            isActive
-                              ? 'bg-primary text-primary-foreground shadow-xs font-bold'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`
-                        : `flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
-                            isActive
-                              ? 'bg-primary text-primary-foreground shadow-xs font-bold'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`
+                      `group relative flex items-center h-10 rounded-xl transition-all cursor-pointer ${
+                        isCollapsed ? 'justify-center mx-auto w-10 px-0' : 'w-full px-3'
+                      } ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground font-medium'
+                      }`
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        <div className="flex items-center gap-2.5">
-                          <Icon size={16} className="shrink-0" />
-                          {!isCollapsed && <span className="truncate">{item.label}</span>}
-                        </div>
+                        <Icon size={17} className="shrink-0 transition-transform duration-200 group-hover:scale-105" />
+
+                        <span
+                          className={`overflow-hidden whitespace-nowrap text-xs transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                            isCollapsed
+                              ? 'max-w-0 opacity-0 pointer-events-none ml-0'
+                              : 'max-w-[160px] opacity-100 ml-2.5 font-semibold'
+                          }`}
+                        >
+                          {item.label}
+                        </span>
+
                         {!isCollapsed && isActive && (
-                          <ChevronRight size={12} className="opacity-70 shrink-0" />
+                          <ChevronRight size={12} className="ml-auto opacity-70 shrink-0" />
                         )}
 
-                        {/* Collapsed floating tooltip */}
+                        {/* Floating tooltip only when collapsed */}
                         {isCollapsed && (
-                          <span className="absolute left-full ml-3 px-2.5 py-1 bg-popover text-popover-foreground border border-border text-xs font-semibold rounded-lg shadow-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                          <span className="absolute left-full ml-3 px-2.5 py-1 bg-popover text-popover-foreground border border-border text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 z-50 translate-x-1 group-hover:translate-x-0">
                             {item.label}
                           </span>
                         )}
@@ -220,32 +245,44 @@ export const SellerLayout = () => {
           ))}
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-2.5 border-t border-border/80 space-y-2 bg-card">
-          {/* Live Storefront quick link */}
+        {/* Sidebar Footer with smooth transitions */}
+        <div className="p-2 border-t border-border/80 space-y-1.5 bg-card shrink-0">
+          {/* Live Storefront */}
           <Link
             to={ROUTE_PATHS.STOREFRONT.HOME}
             target="_blank"
             rel="noreferrer"
             title={isCollapsed ? 'Live Storefront' : undefined}
-            className={`flex items-center rounded-xl border border-border bg-muted/20 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors ${
-              isCollapsed ? 'h-10 w-10 mx-auto justify-center' : 'px-3 py-2 justify-between'
+            className={`group relative flex items-center rounded-xl border border-border bg-muted/20 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all ${
+              isCollapsed ? 'h-10 w-10 mx-auto justify-center' : 'h-9 px-3 justify-between'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <ExternalLink size={14} className="text-primary shrink-0" />
-              {!isCollapsed && <span className="truncate">Live Storefront</span>}
+            <div className="flex items-center">
+              <ExternalLink size={14} className="text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
+              <span
+                className={`overflow-hidden whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                  isCollapsed ? 'max-w-0 opacity-0 pointer-events-none ml-0' : 'max-w-[140px] opacity-100 ml-2.5'
+                }`}
+              >
+                Live Storefront
+              </span>
             </div>
-            {!isCollapsed && <ChevronRight size={11} className="opacity-50" />}
+            {!isCollapsed && <ChevronRight size={11} className="opacity-50 shrink-0" />}
+
+            {isCollapsed && (
+              <span className="absolute left-full ml-3 px-2.5 py-1 bg-popover text-popover-foreground border border-border text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 z-50 translate-x-1 group-hover:translate-x-0">
+                Live Storefront
+              </span>
+            )}
           </Link>
 
           {/* Seller Profile Block */}
           <div
-            className={`flex items-center rounded-xl border border-border/70 bg-muted/30 ${
+            className={`flex items-center rounded-xl border border-border/70 bg-muted/30 transition-all ${
               isCollapsed ? 'p-1.5 justify-center' : 'p-2 justify-between'
             }`}
           >
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center min-w-0">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-2xs overflow-hidden">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
@@ -255,27 +292,32 @@ export const SellerLayout = () => {
                   'S'
                 )}
               </div>
-              {!isCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-foreground truncate leading-tight">
-                    {storeName}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate leading-tight">
-                    {user?.email || 'Artisan Partner'}
-                  </p>
-                </div>
-              )}
+
+              <div
+                className={`overflow-hidden whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                  isCollapsed ? 'max-w-0 opacity-0 pointer-events-none ml-0' : 'max-w-[130px] opacity-100 ml-2'
+                }`}
+              >
+                <p className="text-xs font-bold text-foreground truncate leading-tight">
+                  {storeName}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                  {user?.email || 'Artisan Partner'}
+                </p>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={logout}
-              title="Log out"
-              aria-label="Log out"
-              className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
-            >
-              <LogOut size={14} />
-            </button>
+            {!isCollapsed && (
+              <button
+                type="button"
+                onClick={logout}
+                title="Log out"
+                aria-label="Log out"
+                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0 ml-1"
+              >
+                <LogOut size={14} />
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -292,10 +334,15 @@ export const SellerLayout = () => {
           {/* Drawer Menu */}
           <div className="fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-card border-r border-border p-4 shadow-2xl flex flex-col justify-between transition-transform duration-300 animate-in slide-in-from-left z-10">
             <div>
-              {/* Drawer Header */}
+              {/* Drawer Header (Typographic Brand - No Logo Image) */}
               <div className="flex items-center justify-between pb-4 border-b border-border/80">
                 <div className="flex items-center gap-2">
-                  <Logo textClassName="text-lg" />
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-sm shadow-xs select-none">
+                    G
+                  </span>
+                  <span className="text-base font-black tracking-tight text-foreground font-heading">
+                    GALLA<span className="text-primary">.</span>
+                  </span>
                   <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px] font-bold py-0.5 px-1.5">
                     Studio
                   </Badge>
@@ -394,7 +441,7 @@ export const SellerLayout = () => {
 
       {/* 3. MAIN APPLICATION VIEWPORT */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* Modern Sticky Topbar */}
+        {/* Sticky Topbar */}
         <header className="sticky top-0 z-20 h-16 border-b border-border bg-card/85 backdrop-blur-md px-4 sm:px-6 lg:px-8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             {/* Mobile menu trigger */}
@@ -402,7 +449,7 @@ export const SellerLayout = () => {
               variant="outline"
               size="icon"
               onClick={() => setIsMobileOpen(true)}
-              className="lg:hidden h-9 w-9 rounded-xl border-border"
+              className="lg:hidden h-9 w-9 rounded-xl border-border cursor-pointer"
               aria-label="Open navigation menu"
             >
               <Menu size={17} />
@@ -417,7 +464,7 @@ export const SellerLayout = () => {
 
           {/* Quick Header Actions */}
           <div className="flex items-center gap-2.5">
-            <Button asChild size="sm" className="rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs gap-1.5 shadow-2xs h-8 px-3">
+            <Button asChild size="sm" className="rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs gap-1.5 shadow-2xs h-8 px-3 cursor-pointer">
               <Link to={ROUTE_PATHS.SELLER.CREATE_PRODUCT}>
                 <PlusCircle size={14} />
                 <span className="hidden sm:inline">Add Product</span>
