@@ -41,11 +41,20 @@ class CategoryListCreateView(ListCreateAPIView):
     serializer_class = CategorySerializer
 
     def get_queryset(self):
-        queryset = Category.objects.filter(parent__isnull=True)
+        flat = self.request.query_params.get("flat", "").lower() == "true"
         include_inactive = (
             self.request.query_params.get("include_inactive", "").lower() == "true"
         )
-        if include_inactive and IsPlatformAdmin().has_permission(self.request, self):
+        is_admin = IsPlatformAdmin().has_permission(self.request, self)
+
+        if flat:
+            qs = Category.objects.all().select_related("parent")
+            if not (include_inactive and is_admin):
+                qs = qs.filter(is_active=True)
+            return qs
+
+        queryset = Category.objects.filter(parent__isnull=True)
+        if include_inactive and is_admin:
             return queryset.prefetch_related("subcategories")
 
         return queryset.filter(is_active=True).prefetch_related("subcategories")

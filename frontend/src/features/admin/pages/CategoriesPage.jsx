@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Layers,
@@ -11,9 +11,14 @@ import {
   CheckCircle2,
   FolderTree,
   Tag,
+  Upload,
+  X,
+  ImageIcon,
 } from 'lucide-react';
 import { adminService } from '../services/adminService.js';
 import { catalogService } from '../../storefront/services/catalogService.js';
+import { getMediaUrl } from '../../../lib/utils.js';
+import { queryKeys } from '../../../lib/queryClient.js';
 import { Card } from '../../../components/ui/card.jsx';
 import { Button } from '../../../components/ui/button.jsx';
 import { Input } from '../../../components/ui/input.jsx';
@@ -52,20 +57,24 @@ export const CategoriesPage = () => {
     description: '',
     parent: '',
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [formError, setFormError] = useState('');
 
   // Delete Alert State
   const [categoryToDelete, setCategoryToDelete] = useState(null);
 
-  // Fetch categories
+  // Fetch all categories (flat=true allows seeing all categories and selecting any as a parent)
   const { data: categoriesData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['catalog', 'categories'],
-    queryFn: () => catalogService.getCategories(),
+    queryKey: ['catalog', 'categories', 'flat'],
+    queryFn: () => catalogService.getCategories({ flat: true, include_inactive: true }),
   });
 
-  const categories = Array.isArray(categoriesData)
-    ? categoriesData
-    : categoriesData?.results || [];
+  const categories = useMemo(() => {
+    return Array.isArray(categoriesData)
+      ? categoriesData
+      : categoriesData?.results || [];
+  }, [categoriesData]);
 
   const filteredCategories = categories.filter((cat) => {
     if (!searchQuery) return true;
@@ -73,9 +82,20 @@ export const CategoriesPage = () => {
     return (
       cat.name?.toLowerCase().includes(q) ||
       cat.slug?.toLowerCase().includes(q) ||
-      cat.description?.toLowerCase().includes(q)
+      cat.description?.toLowerCase().includes(q) ||
+      cat.parent_name?.toLowerCase().includes(q)
     );
   });
+
+  // Potential parents (cannot choose self or direct child)
+  const potentialParents = useMemo(() => {
+    return categories.filter((cat) => {
+      if (!editingCategory) return true;
+      if (cat.id === editingCategory.id || cat.slug === editingCategory.slug) return false;
+      if (cat.parent === editingCategory.id || cat.parent_slug === editingCategory.slug) return false;
+      return true;
+    });
+  }, [categories, editingCategory]);
 
   // Create or Update mutation
   const saveMutation = useMutation({
@@ -87,6 +107,7 @@ export const CategoriesPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.categories() });
       setIsFormOpen(false);
       resetForm();
     },
@@ -94,6 +115,8 @@ export const CategoriesPage = () => {
       const msg =
         err?.response?.data?.name?.[0] ||
         err?.response?.data?.slug?.[0] ||
+        err?.response?.data?.image?.[0] ||
+        err?.response?.data?.parent?.[0] ||
         err?.response?.data?.detail ||
         err?.message ||
         'Failed to save category.';
@@ -106,6 +129,7 @@ export const CategoriesPage = () => {
     mutationFn: (slug) => adminService.deleteCategory(slug),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.categories() });
       setCategoryToDelete(null);
     },
   });
@@ -113,6 +137,8 @@ export const CategoriesPage = () => {
   const resetForm = () => {
     setEditingCategory(null);
     setFormData({ name: '', slug: '', description: '', parent: '' });
+    setImageFile(null);
+    setImagePreview(null);
     setFormError('');
   };
 
@@ -127,8 +153,10 @@ export const CategoriesPage = () => {
       name: cat.name || '',
       slug: cat.slug || '',
       description: cat.description || '',
-      parent: cat.parent?.id || cat.parent || '',
+      parent: cat.parent?.id || (typeof cat.parent === 'string' ? cat.parent : '') || '',
     });
+    setImageFile(null);
+    setImagePreview(cat.image ? getMediaUrl(cat.image) : null);
     setFormError('');
     setIsFormOpen(true);
   };
@@ -147,6 +175,19 @@ export const CategoriesPage = () => {
     }));
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
   const handleSubmitForm = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -154,16 +195,22 @@ export const CategoriesPage = () => {
       return;
     }
 
-    const payload = {
-      name: formData.name.trim(),
-      slug: formData.slug.trim(),
-      description: formData.description.trim(),
-    };
+    const formDataToSend = new FormData();
+    formDataToSend.append('name', formData.name.trim());
+    formDataToSend.append('slug', formData.slug.trim());
+    formDataToSend.append('description', formData.description.trim());
     if (formData.parent) {
-      payload.parent = formData.parent;
+      formDataToSend.append('parent', formData.parent);
+    } else if (editingCategory) {
+      formDataToSend.append('parent', '');
+    }
+    if (imageFile) {
+      formDataToSend.append('image', imageFile);
+    } else if (editingCategory && !imagePreview && editingCategory.image) {
+      formDataToSend.append('image', '');
     }
 
-    saveMutation.mutate(payload);
+    saveMutation.mutate(formDataToSend);
   };
 
   const handleConfirmDelete = () => {
@@ -252,22 +299,38 @@ export const CategoriesPage = () => {
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Layers size={18} />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary overflow-hidden border border-border/40 shrink-0">
+                      {cat.image ? (
+                        <img
+                          src={getMediaUrl(cat.image)}
+                          alt={cat.name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const fallback = e.currentTarget.parentElement?.querySelector('.cat-icon-fallback');
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <Layers size={18} className={`cat-icon-fallback ${cat.image ? 'hidden' : ''}`} />
                     </div>
-                    <div>
-                      <h3 className="text-sm font-extrabold text-foreground">{cat.name}</h3>
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-extrabold text-foreground truncate">{cat.name}</h3>
+                      <span className="font-mono text-[11px] text-muted-foreground block truncate">
                         /{cat.slug}
                       </span>
                     </div>
                   </div>
 
-                  {cat.parent && (
-                    <Badge variant="outline" className="text-[10px] py-0 font-semibold text-muted-foreground">
-                      Subcategory
+                  {cat.parent_name ? (
+                    <Badge variant="outline" className="text-[10px] py-0 font-semibold bg-primary/10 text-primary border-primary/20 shrink-0">
+                      Subcategory of {cat.parent_name}
                     </Badge>
-                  )}
+                  ) : cat.subcategories?.length > 0 ? (
+                    <Badge variant="outline" className="text-[10px] py-0 font-semibold text-muted-foreground shrink-0">
+                      {cat.subcategories.length} subcategories
+                    </Badge>
+                  ) : null}
                 </div>
 
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
@@ -350,6 +413,80 @@ export const CategoriesPage = () => {
                 className="text-xs font-mono rounded-xl bg-background border-border"
                 required
               />
+            </div>
+
+            {/* Category Image Upload */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-foreground">
+                Category Image / Icon (Optional)
+              </Label>
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-border/80 bg-muted/20 overflow-hidden shrink-0 relative">
+                  {imagePreview ? (
+                    <img
+                      src={imagePreview}
+                      alt="Category preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon size={22} className="text-muted-foreground/60" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="catImage"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 cursor-pointer shadow-2xs transition-colors"
+                    >
+                      <Upload size={13} className="text-primary" />
+                      <span>{imagePreview ? 'Change Image' : 'Upload Image'}</span>
+                    </label>
+                    {imagePreview && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+                      >
+                        <X size={13} />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="catImage"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="sr-only"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    PNG, JPG, SVG or WebP. Displayed in storefront category circles.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Parent Category Hierarchy */}
+            <div className="space-y-1.5">
+              <Label htmlFor="catParent" className="text-xs font-bold text-foreground">
+                Parent Category (Optional)
+              </Label>
+              <select
+                id="catParent"
+                value={formData.parent}
+                onChange={(e) => setFormData((prev) => ({ ...prev, parent: e.target.value }))}
+                className="w-full text-xs rounded-xl bg-background border border-border px-3 py-2 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="">None (Top-Level Category)</option>
+                {potentialParents.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.parent_name ? `(${p.parent_name} > ${p.name})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Nest under a parent category (e.g. Clothing &gt; Shirts).
+              </p>
             </div>
 
             <div className="space-y-1.5">

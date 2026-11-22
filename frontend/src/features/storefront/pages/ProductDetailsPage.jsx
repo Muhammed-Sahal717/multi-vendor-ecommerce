@@ -97,26 +97,48 @@ export const ProductDetailsPage = () => {
     product?.category_name ||
     (typeof product?.category === 'object' ? product?.category?.name : null);
 
-  // 2. Fetch Related Products
+  // 2. Fetch Related & Recommended Products
   const { data: relatedData } = useQuery({
     queryKey: queryKeys.catalog.products({
       category: resolvedCategorySlug,
-      page_size: 5,
+      page_size: 6,
     }),
     queryFn: () =>
       catalogService.getProducts({
         category: resolvedCategorySlug,
-        page_size: 5,
+        page_size: 6,
       }),
     enabled: Boolean(resolvedCategorySlug),
     staleTime: 1000 * 60 * 5,
   });
 
-  const relatedProducts = (
-    relatedData?.results || (Array.isArray(relatedData) ? relatedData : [])
-  )
-    .filter((p) => p.id !== product?.id && p.slug !== product?.slug)
-    .slice(0, 4);
+  // Fetch storewide top recommendations to backfill
+  const { data: fallbackData } = useQuery({
+    queryKey: queryKeys.catalog.products({ page_size: 8 }),
+    queryFn: () => catalogService.getProducts({ page_size: 8 }),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const recommendedProducts = useMemo(() => {
+    const categoryMatches = (
+      relatedData?.results || (Array.isArray(relatedData) ? relatedData : [])
+    ).filter((p) => p.id !== product?.id && p.slug !== product?.slug);
+
+    if (categoryMatches.length >= 4) {
+      return categoryMatches.slice(0, 4);
+    }
+
+    const fallbacks = (
+      fallbackData?.results || (Array.isArray(fallbackData) ? fallbackData : [])
+    ).filter(
+      (p) =>
+        p.id !== product?.id &&
+        p.slug !== product?.slug &&
+        !categoryMatches.some((cm) => cm.id === p.id)
+    );
+
+    return [...categoryMatches, ...fallbacks].slice(0, 4);
+  }, [relatedData, fallbackData, product]);
 
   // 3. Add to Cart Mutation
   const addToCartMutation = useMutation({
@@ -664,16 +686,19 @@ export const ProductDetailsPage = () => {
         </div>
       </section>
 
-      {/* 4. Related Recommendations Section */}
-      {relatedProducts.length > 0 && (
+      {/* 4. Recommended Products Section */}
+      {recommendedProducts.length > 0 && (
         <section className="space-y-6 pt-6 border-t border-border/60">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-heading">
-                Related Products
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-heading flex items-center gap-2">
+                <Sparkles size={20} className="text-primary stroke-[2.2]" />
+                <span>Recommended Products</span>
               </h2>
               <p className="text-xs text-muted-foreground">
-                More handcrafted and trending selections from {displayCategory || 'this collection'}
+                {displayCategory
+                  ? `Curated selections from ${displayCategory} and trending marketplace crafts`
+                  : 'Handpicked artisan crafts and trending selections you might like'}
               </p>
             </div>
 
@@ -683,7 +708,13 @@ export const ProductDetailsPage = () => {
               size="sm"
               className="rounded-full text-xs font-semibold border-border/80 hover:border-primary/40 cursor-pointer"
             >
-              <Link to={`${ROUTE_PATHS.STOREFRONT.PRODUCTS}?category=${encodeURIComponent(resolvedCategorySlug || '')}`}>
+              <Link
+                to={
+                  resolvedCategorySlug
+                    ? `${ROUTE_PATHS.STOREFRONT.PRODUCTS}?category=${encodeURIComponent(resolvedCategorySlug)}`
+                    : ROUTE_PATHS.STOREFRONT.PRODUCTS
+                }
+              >
                 <span>View More</span>
                 <ArrowRight size={13} className="ml-1" />
               </Link>
@@ -691,7 +722,7 @@ export const ProductDetailsPage = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 sm:gap-4 md:gap-5">
-            {relatedProducts.map((p, idx) => (
+            {recommendedProducts.map((p, idx) => (
               <ProductCard key={p.id || p.slug} product={p} index={idx} />
             ))}
           </div>

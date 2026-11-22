@@ -45,6 +45,48 @@ const PRICE_PRESETS = [
 
 const PAGE_SIZE = 15;
 
+const resolveCategoryHierarchy = (categories, selectedCategory) => {
+  if (!selectedCategory || !Array.isArray(categories)) {
+    return { matchedCategory: null, parentCategory: null, activeSubcategories: [] };
+  }
+
+  for (const cat of categories) {
+    if (
+      cat.slug === selectedCategory ||
+      String(cat.id) === String(selectedCategory) ||
+      cat.name?.toLowerCase() === selectedCategory.toLowerCase()
+    ) {
+      return {
+        matchedCategory: cat,
+        parentCategory: null,
+        activeSubcategories: Array.isArray(cat.subcategories) ? cat.subcategories : [],
+      };
+    }
+
+    if (Array.isArray(cat.subcategories)) {
+      const sub = cat.subcategories.find(
+        (s) =>
+          s.slug === selectedCategory ||
+          String(s.id) === String(selectedCategory) ||
+          s.name?.toLowerCase() === selectedCategory.toLowerCase()
+      );
+      if (sub) {
+        return {
+          matchedCategory: sub,
+          parentCategory: cat,
+          activeSubcategories: cat.subcategories,
+        };
+      }
+    }
+  }
+
+  return {
+    matchedCategory: null,
+    parentCategory: null,
+    activeSubcategories: [],
+  };
+};
+
 export const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -73,41 +115,22 @@ export const ProductsPage = () => {
       : categoriesData?.results || [];
   }, [categoriesData]);
 
-  // Match category by slug, id, or uuid
-  const matchedCategory = useMemo(() => {
-    if (!selectedCategory) return null;
-    return (
-      categories.find(
-        (c) =>
-          c.slug === selectedCategory ||
-          String(c.id) === String(selectedCategory) ||
-          c.name?.toLowerCase() === selectedCategory.toLowerCase()
-      ) || null
-    );
-  }, [categories, selectedCategory]);
+  // Match category by slug, id, or uuid, finding top-level or subcategory
+  const { matchedCategory, parentCategory, activeSubcategories } =
+    resolveCategoryHierarchy(categories, selectedCategory);
 
   const effectiveCategorySlug = matchedCategory?.slug || selectedCategory;
 
   // Query object for API
-  const queryParams = useMemo(() => {
-    const params = {
-      page: currentPage,
-      page_size: PAGE_SIZE,
-      ordering: selectedOrdering,
-    };
-    if (effectiveCategorySlug) params.category = effectiveCategorySlug;
-    if (searchQuery) params.search = searchQuery;
-    if (minPriceParam) params.min_price = minPriceParam;
-    if (maxPriceParam) params.max_price = maxPriceParam;
-    return params;
-  }, [
-    currentPage,
-    selectedOrdering,
-    effectiveCategorySlug,
-    searchQuery,
-    minPriceParam,
-    maxPriceParam,
-  ]);
+  const queryParams = {
+    page: currentPage,
+    page_size: PAGE_SIZE,
+    ordering: selectedOrdering,
+    ...(effectiveCategorySlug ? { category: effectiveCategorySlug } : {}),
+    ...(searchQuery ? { search: searchQuery } : {}),
+    ...(minPriceParam ? { min_price: minPriceParam } : {}),
+    ...(maxPriceParam ? { max_price: maxPriceParam } : {}),
+  };
 
   // 2. Fetch Products
   const {
@@ -184,19 +207,37 @@ export const ProductsPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-5">
-      {/* Breadcrumb Row */}
+      {/* Breadcrumb Row with Hierarchical Categories */}
       <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Link to={ROUTE_PATHS.STOREFRONT.HOME} className="hover:text-primary transition-colors">
           Home
         </Link>
         <span>/</span>
-        <span className={activeCategoryName ? 'text-muted-foreground' : 'text-foreground font-semibold'}>
+        <button
+          type="button"
+          onClick={() => updateFilters({ category: '' })}
+          className={`cursor-pointer transition-colors ${
+            !selectedCategory ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-primary'
+          }`}
+        >
           Products
-        </span>
-        {activeCategoryName && (
+        </button>
+        {parentCategory && (
           <>
             <span>/</span>
-            <span className="text-foreground font-semibold">{activeCategoryName}</span>
+            <button
+              type="button"
+              onClick={() => updateFilters({ category: parentCategory.slug })}
+              className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+            >
+              {parentCategory.name}
+            </button>
+          </>
+        )}
+        {matchedCategory && (
+          <>
+            <span>/</span>
+            <span className="text-foreground font-semibold">{matchedCategory.name}</span>
           </>
         )}
       </nav>
@@ -218,7 +259,8 @@ export const ProductsPage = () => {
               All Categories
             </button>
             {categories.map((cat) => {
-              const isSelected = effectiveCategorySlug === cat.slug;
+              const isSelected =
+                effectiveCategorySlug === cat.slug || parentCategory?.slug === cat.slug;
               return (
                 <button
                   key={cat.id || cat.slug}
@@ -236,6 +278,51 @@ export const ProductsPage = () => {
             })}
           </div>
         </div>
+
+        {/* Subcategories Secondary Pills (when active parent category has subcategories) */}
+        {activeSubcategories.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pl-1 scrollbar-none">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 mr-1">
+              {parentCategory ? parentCategory.name : matchedCategory?.name}:
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                updateFilters({ category: (parentCategory || matchedCategory).slug })
+              }
+              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                selectedCategory === (parentCategory || matchedCategory).slug
+                  ? 'bg-foreground text-background font-bold shadow-2xs'
+                  : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              All {parentCategory ? parentCategory.name : matchedCategory?.name}
+            </button>
+            {activeSubcategories.map((sub) => {
+              const isSubSelected = selectedCategory === sub.slug;
+              return (
+                <button
+                  key={sub.id || sub.slug}
+                  type="button"
+                  onClick={() =>
+                    updateFilters({
+                      category: isSubSelected
+                        ? (parentCategory || matchedCategory).slug
+                        : sub.slug,
+                    })
+                  }
+                  className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                    isSubSelected
+                      ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                      : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {sub.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Action Toolbar: Filter Trigger, Active Count, Sort Dropdown */}
         <div className="flex items-center justify-between gap-3 border-y border-border/60 py-3">
@@ -460,28 +547,57 @@ export const ProductsPage = () => {
                   </button>
 
                   {categories.map((cat) => {
-                    const isSelected = selectedCategory === cat.slug;
+                    const isParentSelected = selectedCategory === cat.slug;
+                    const hasSubs = Array.isArray(cat.subcategories) && cat.subcategories.length > 0;
                     return (
-                      <button
-                        key={cat.id || cat.slug}
-                        type="button"
-                        onClick={() => {
-                          updateFilters({ category: isSelected ? '' : cat.slug });
-                          setIsFilterDrawerOpen(false);
-                        }}
-                        className={`flex items-center justify-between w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                        }`}
-                      >
-                        <span className="truncate">{cat.name}</span>
-                        {isSelected ? (
-                          <Check size={14} className="stroke-[2.5]" />
-                        ) : cat.product_count !== undefined ? (
-                          <span className="text-[10px] text-muted-foreground/60">{cat.product_count}</span>
-                        ) : null}
-                      </button>
+                      <div key={cat.id || cat.slug} className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateFilters({ category: isParentSelected ? '' : cat.slug });
+                            setIsFilterDrawerOpen(false);
+                          }}
+                          className={`flex items-center justify-between w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                            isParentSelected
+                              ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                          }`}
+                        >
+                          <span className="truncate font-semibold">{cat.name}</span>
+                          {isParentSelected ? (
+                            <Check size={14} className="stroke-[2.5]" />
+                          ) : cat.product_count !== undefined ? (
+                            <span className="text-[10px] text-muted-foreground/60">{cat.product_count}</span>
+                          ) : null}
+                        </button>
+
+                        {/* Nested Subcategories */}
+                        {hasSubs && (
+                          <div className="pl-3 space-y-1 border-l-2 border-border/50 ml-3">
+                            {cat.subcategories.map((sub) => {
+                              const isSubSelected = selectedCategory === sub.slug;
+                              return (
+                                <button
+                                  key={sub.id || sub.slug}
+                                  type="button"
+                                  onClick={() => {
+                                    updateFilters({ category: isSubSelected ? cat.slug : sub.slug });
+                                    setIsFilterDrawerOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                    isSubSelected
+                                      ? 'bg-primary/15 text-primary font-bold'
+                                      : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                                  }`}
+                                >
+                                  <span className="truncate">{sub.name}</span>
+                                  {isSubSelected && <Check size={12} className="stroke-[2.5]" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
