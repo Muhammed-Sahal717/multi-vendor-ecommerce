@@ -28,13 +28,23 @@ import { useAuth } from '../../context/AuthProvider.jsx';
 import { ROUTE_PATHS } from '../../routes/routePaths.js';
 import { ROLES } from '../../lib/constants.js';
 import { cartService } from '../../features/cart/services/cartService.js';
+import { authService } from '../../features/auth/services/authService.js';
 import { queryKeys } from '../../lib/queryClient.js';
 import { getUserAvatarUrl } from '../../lib/utils.js';
 
 export const Navbar = () => {
   const navigate = useNavigate();
   const { user, role, isAuthenticated, logout } = useAuth();
-  const avatarUrl = getUserAvatarUrl(user);
+
+  // Fetch full profile to ensure avatar is always up-to-date
+  const { data: profile } = useQuery({
+    queryKey: queryKeys.auth.profile(),
+    queryFn: authService.getProfile,
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const avatarUrl = getUserAvatarUrl(profile) || getUserAvatarUrl(user);
 
   // Fetch cart data when authenticated as customer to show item badge
   const { data: cartData } = useQuery({
