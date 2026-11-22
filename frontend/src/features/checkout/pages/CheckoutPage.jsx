@@ -49,9 +49,22 @@ export const CheckoutPage = () => {
   const displayTotalItems = items.length > 0 ? totalItems : cachedSnapshot.totalItems;
   const displayTotalPrice = items.length > 0 ? totalPrice : cachedSnapshot.totalPrice;
 
+  // COD is only available for orders up to ₹1,500
+  const isCodForbidden = Number(displayTotalPrice) > 1500;
+
   const [selectedAddressId, setSelectedAddressId] = useState('');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cod');
+  const [userSelectedPaymentMethod, setUserSelectedPaymentMethod] = useState('cod');
   const [checkoutError, setCheckoutError] = useState('');
+
+  // Effective payment method: force razorpay if order > 1500
+  const selectedPaymentMethod = isCodForbidden ? 'razorpay' : userSelectedPaymentMethod;
+
+  const handleSelectPaymentMethod = (method) => {
+    if (method === 'cod' && isCodForbidden) {
+      return;
+    }
+    setUserSelectedPaymentMethod(method);
+  };
 
   // Razorpay simulation modal state
   const [razorpayOrder, setRazorpayOrder] = useState(null);
@@ -91,6 +104,13 @@ export const CheckoutPage = () => {
     setCheckoutError('');
     if (!selectedAddressId) {
       setCheckoutError('Please select or add a shipping address.');
+      return;
+    }
+
+    if (selectedPaymentMethod === 'cod' && Number(displayTotalPrice) > 1500) {
+      setCheckoutError(
+        'Cash on Delivery is only available for orders up to ₹1,500. Please select Online Payment.'
+      );
       return;
     }
 
@@ -250,7 +270,8 @@ export const CheckoutPage = () => {
           {/* Step 2: Payment Method */}
           <PaymentMethodSelector
             selectedMethod={selectedPaymentMethod}
-            onSelectMethod={setSelectedPaymentMethod}
+            onSelectMethod={handleSelectPaymentMethod}
+            orderTotal={displayTotalPrice}
           />
 
           {/* Delivery & Buyer Protection Guarantee */}

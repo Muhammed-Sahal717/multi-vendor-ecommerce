@@ -11,6 +11,9 @@ from django.db.models import Sum
 from apps.audit.constants import AuditAction, AuditEntity
 from apps.audit.services import record_audit_event
 
+MAX_COD_ORDER_AMOUNT = Decimal("1500.00")
+
+
 ALLOWED_ORDER_ITEM_TRANSITIONS = {
     OrderItem.Status.PENDING: [
         OrderItem.Status.CONFIRMED,
@@ -117,6 +120,19 @@ def create_order(*, user, address, payment_method, ip_address=None, user_agent="
 
     shipping_fee = Decimal("0.00")
     total_amount = subtotal + shipping_fee
+
+    if (
+        payment_method == Order.PaymentMethod.COD
+        and total_amount > MAX_COD_ORDER_AMOUNT
+    ):
+        raise ValidationError(
+            {
+                "payment_method": (
+                    "Cash on Delivery is only available for orders up to ₹1,500. "
+                    "For orders above ₹1,500, please choose Online Payment (Razorpay)."
+                )
+            }
+        )
 
     order = Order.objects.create(
         user=user,

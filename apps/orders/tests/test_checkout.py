@@ -324,3 +324,56 @@ class CheckoutTests(OrderTestBase):
 
         self.assertEqual(event.actor, self.customer)
         self.assertEqual(event.ip_address, "127.0.0.1")
+
+    def test_checkout_rejects_cod_when_total_exceeds_1500(self):
+        # Cart total: 2 items * 800.00 = 1600.00 (> 1500.00)
+        self.product.price = Decimal("800.00")
+        self.product.save(update_fields=["price"])
+
+        response = self.client.post(
+            self.checkout_url,
+            self.checkout_data,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("payment_method", response.data)
+        self.assertIn("1,500", str(response.data["payment_method"]))
+        self.assertFalse(Order.objects.exists())
+
+    def test_checkout_allows_cod_when_total_is_at_or_below_1500(self):
+        # Cart total: 2 items * 750.00 = 1500.00 (<= 1500.00)
+        self.product.price = Decimal("750.00")
+        self.product.save(update_fields=["price"])
+
+        response = self.client.post(
+            self.checkout_url,
+            self.checkout_data,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = Order.objects.get(user=self.customer)
+        self.assertEqual(order.payment_method, "cod")
+        self.assertEqual(order.total_amount, Decimal("1500.00"))
+
+    def test_checkout_allows_razorpay_when_total_exceeds_1500(self):
+        # Cart total: 2 items * 1000.00 = 2000.00 (> 1500.00)
+        self.product.price = Decimal("1000.00")
+        self.product.save(update_fields=["price"])
+
+        data = {
+            **self.checkout_data,
+            "payment_method": "razorpay",
+        }
+
+        response = self.client.post(
+            self.checkout_url,
+            data,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = Order.objects.get(user=self.customer)
+        self.assertEqual(order.payment_method, "razorpay")
+        self.assertEqual(order.total_amount, Decimal("2000.00"))
