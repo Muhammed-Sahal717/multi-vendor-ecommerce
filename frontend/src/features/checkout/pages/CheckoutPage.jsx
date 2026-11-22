@@ -10,6 +10,8 @@ import {
   Check,
   Truck,
   RotateCcw,
+  Clock,
+  Lock,
 } from 'lucide-react';
 import { useCart } from '../../cart/hooks/useCart.js';
 import { checkoutService } from '../services/checkoutService.js';
@@ -257,6 +259,55 @@ export const CheckoutPage = () => {
         </div>
       </div>
 
+      {/* Payment Incomplete Notification Banner (When payment modal was closed without paying) */}
+      {razorpayOrder && !isRazorpayModalOpen && (
+        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              <Clock size={20} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-extrabold text-foreground">
+                Payment Incomplete for Order #{razorpayOrder.order_number}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your order has been saved, but payment was not completed. Complete payment now to confirm fulfillment with artisans.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5 pt-1">
+            <Button
+              size="sm"
+              onClick={() => setIsRazorpayModalOpen(true)}
+              className="rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-4 h-9 shadow-xs gap-1.5 cursor-pointer"
+            >
+              <Lock size={13} />
+              <span>Complete Payment (Pay ₹{Number(razorpayOrder.total_amount).toLocaleString('en-IN')})</span>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="rounded-xl font-semibold text-xs h-9 border-border/80 cursor-pointer"
+            >
+              <Link to={ROUTE_PATHS.CUSTOMER.ORDER_DETAILS(razorpayOrder.id)}>
+                <span>View Order Details</span>
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="rounded-xl font-semibold text-xs h-9 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <Link to={ROUTE_PATHS.STOREFRONT.PRODUCTS}>
+                <span>Continue Shopping</span>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid: Steps on Left, Sticky Summary on Right */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
         {/* Left Column: Checkout Steps */}
@@ -319,15 +370,14 @@ export const CheckoutPage = () => {
         isOpen={isRazorpayModalOpen}
         order={razorpayOrder}
         onPaymentSuccess={handleRazorpaySuccess}
-        onPaymentFailure={() => {}}
         onClose={() => {
           setIsRazorpayModalOpen(false);
           queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
+          queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
           if (razorpayOrder) {
-            navigate(ROUTE_PATHS.STOREFRONT.ORDER_SUCCESS, {
-              state: { order: razorpayOrder, paidOnline: false },
-              replace: true,
-            });
+            setCheckoutError(
+              `Payment was not completed. Order #${razorpayOrder.order_number} has been created and is pending payment.`
+            );
           }
         }}
       />

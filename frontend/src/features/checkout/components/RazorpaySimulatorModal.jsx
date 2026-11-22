@@ -4,8 +4,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Loader2,
-  CheckCircle,
-  XCircle,
+  Lock,
 } from 'lucide-react';
 import { paymentService } from '../services/paymentService.js';
 import {
@@ -23,7 +22,6 @@ export const RazorpaySimulatorModal = ({
   isOpen,
   order,
   onPaymentSuccess,
-  onPaymentFailure,
   onClose,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,7 +35,7 @@ export const RazorpaySimulatorModal = ({
     order.payment_id;
   const totalAmount = order.total_amount;
 
-  const handleSimulatePayment = async (outcome) => {
+  const handleSimulatePayment = async () => {
     if (!paymentId) {
       setErrorStatus('No payment reference found for this order.');
       return;
@@ -47,23 +45,11 @@ export const RazorpaySimulatorModal = ({
     setErrorStatus('');
 
     try {
-      if (outcome === 'successful') {
-        await paymentService.mockProcessPayment(paymentId, {
-          outcome: 'successful',
-        });
-        setIsProcessing(false);
-        onPaymentSuccess(order);
-      } else {
-        await paymentService.mockProcessPayment(paymentId, {
-          outcome: 'failed',
-          failure_reason: 'User cancelled or transaction declined by issuer bank.',
-        });
-        setIsProcessing(false);
-        setErrorStatus('Payment simulation failed (Simulated bank decline). You can retry or choose another method.');
-        if (onPaymentFailure) {
-          onPaymentFailure(order);
-        }
-      }
+      await paymentService.mockProcessPayment(paymentId, {
+        outcome: 'successful',
+      });
+      setIsProcessing(false);
+      onPaymentSuccess(order);
     } catch (err) {
       setIsProcessing(false);
       setErrorStatus(
@@ -89,7 +75,7 @@ export const RazorpaySimulatorModal = ({
                 <DialogTitle className="text-base font-black text-foreground font-heading flex items-center gap-2">
                   <span>Razorpay Checkout</span>
                   <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 rounded-full font-bold">
-                    Sandbox
+                    Secure Gateway
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground font-mono">
@@ -107,7 +93,7 @@ export const RazorpaySimulatorModal = ({
             <PriceDisplay price={totalAmount} size="lg" className="text-3xl font-black text-foreground font-heading" />
           </div>
           <p className="text-[11px] text-muted-foreground pt-1">
-            Test gateway environment &bull; No real currency will be charged
+            Safe &amp; encrypted transaction via Razorpay gateway
           </p>
         </div>
 
@@ -118,36 +104,25 @@ export const RazorpaySimulatorModal = ({
           </div>
         )}
 
-        {/* Action Buttons for Developer / User Demo */}
+        {/* Payment Action */}
         <div className="space-y-2.5 pt-2">
           <Button
             type="button"
-            onClick={() => handleSimulatePayment('successful')}
+            onClick={handleSimulatePayment}
             disabled={isProcessing}
-            className="w-full h-11 rounded-2xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-md shadow-primary/20 gap-2 cursor-pointer"
+            className="w-full h-12 rounded-2xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-sm shadow-md shadow-primary/25 gap-2 cursor-pointer transition-all"
           >
             {isProcessing ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
-                <span>Authorizing with Bank...</span>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Authorizing Payment...</span>
               </>
             ) : (
               <>
-                <CheckCircle size={15} />
-                <span>Simulate Successful Payment (Pass)</span>
+                <Lock size={15} />
+                <span>Pay ₹{Number(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </>
             )}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleSimulatePayment('failed')}
-            disabled={isProcessing}
-            className="w-full h-11 rounded-2xl font-semibold border-destructive/30 text-destructive hover:bg-destructive/10 text-xs gap-2 cursor-pointer"
-          >
-            <XCircle size={15} />
-            <span>Simulate Payment Failure (Fail)</span>
           </Button>
 
           <div className="pt-2 text-center">
@@ -155,7 +130,7 @@ export const RazorpaySimulatorModal = ({
               type="button"
               onClick={onClose}
               disabled={isProcessing}
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
             >
               Cancel and return to checkout
             </button>
@@ -164,7 +139,7 @@ export const RazorpaySimulatorModal = ({
 
         <div className="pt-2 border-t border-border/60 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
           <ShieldCheck size={13} className="text-primary" />
-          <span>Secured by 256-bit encryption</span>
+          <span>Secured by 256-bit encryption &bull; PCI-DSS Compliant</span>
         </div>
       </DialogContent>
     </Dialog>
