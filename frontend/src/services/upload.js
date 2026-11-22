@@ -9,9 +9,6 @@ export const uploadFormData = async (url, formData, method = 'post', onUploadPro
     url,
     method,
     data: formData,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
     onUploadProgress,
   });
 
@@ -24,13 +21,27 @@ export const uploadFormData = async (url, formData, method = 'post', onUploadPro
 export const uploadProfileImage = async (file, onUploadProgress = null) => {
   const formData = new FormData();
   formData.append('image', file);
+  formData.append('profile_image', file);
 
-  return uploadFormData(
-    API_ENDPOINTS.AUTH.PROFILE_IMAGE,
-    formData,
-    'patch',
-    onUploadProgress
-  );
+  try {
+    return await uploadFormData(
+      API_ENDPOINTS.AUTH.PROFILE_IMAGE,
+      formData,
+      'patch',
+      onUploadProgress
+    );
+  } catch (error) {
+    // If PATCH /auth/profile/image/ fails with 404 or 405, fallback to PATCH /auth/profile/
+    if (error?.response?.status === 404 || error?.response?.status === 405) {
+      return await uploadFormData(
+        API_ENDPOINTS.AUTH.PROFILE,
+        formData,
+        'patch',
+        onUploadProgress
+      );
+    }
+    throw error;
+  }
 };
 
 /**

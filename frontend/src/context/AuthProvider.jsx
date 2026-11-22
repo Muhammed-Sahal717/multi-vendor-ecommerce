@@ -67,6 +67,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     isInitializing,
     refetchUser: fetchCurrentUser,
+    updateUser: setUser,
+    setUser,
     logout: handleLogout,
   };
 

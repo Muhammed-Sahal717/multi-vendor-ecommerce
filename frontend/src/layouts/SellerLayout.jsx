@@ -15,6 +15,7 @@ import {
 import { Logo } from '../components/shared/Logo.jsx';
 import { useAuth } from '../context/AuthProvider.jsx';
 import { ROUTE_PATHS } from '../routes/routePaths.js';
+import { getUserAvatarUrl } from '../lib/utils.js';
 import { Badge } from '../components/ui/badge.jsx';
 
 const SELLER_NAV_ITEMS = [
@@ -83,8 +84,14 @@ export const SellerLayout = () => {
             </Link>
 
             <div className="flex items-center gap-2 border-l border-border pl-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-xs font-bold text-primary-foreground shadow-xs">
-                {user?.first_name ? user.first_name[0].toUpperCase() : 'S'}
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-xs font-bold text-primary-foreground shadow-xs overflow-hidden shrink-0">
+                {getUserAvatarUrl(user) ? (
+                  <img src={getUserAvatarUrl(user)} alt="Seller Avatar" className="h-full w-full object-cover" />
+                ) : user?.first_name ? (
+                  user.first_name[0].toUpperCase()
+                ) : (
+                  'S'
+                )}
               </div>
               <span className="hidden sm:inline-block text-xs font-bold text-foreground">
                 {user?.first_name ? `${user.first_name}` : 'Artisan Seller'}

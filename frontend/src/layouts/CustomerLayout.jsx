@@ -13,6 +13,7 @@ import { Navbar } from '../components/shared/Navbar.jsx';
 import { Footer } from '../components/shared/Footer.jsx';
 import { useAuth } from '../context/AuthProvider.jsx';
 import { ROUTE_PATHS } from '../routes/routePaths.js';
+import { getUserAvatarUrl } from '../lib/utils.js';
 import { Badge } from '../components/ui/badge.jsx';
 import { Card } from '../components/ui/card.jsx';
 
@@ -51,6 +52,7 @@ const NAV_ITEMS = [
 
 export const CustomerLayout = () => {
   const { user, role, logout } = useAuth();
+  const avatarUrl = getUserAvatarUrl(user);
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20 text-foreground">
@@ -62,8 +64,14 @@ export const CustomerLayout = () => {
           <div className="mb-8 rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-sm">
-                  {user?.first_name ? user.first_name[0].toUpperCase() : user?.email?.[0].toUpperCase() || 'U'}
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-sm overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
+                  ) : user?.first_name ? (
+                    user.first_name[0].toUpperCase()
+                  ) : (
+                    user?.email?.[0].toUpperCase() || 'U'
+                  )}
                 </div>
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">

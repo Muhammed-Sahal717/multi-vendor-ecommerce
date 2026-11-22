@@ -29,10 +29,12 @@ import { ROUTE_PATHS } from '../../routes/routePaths.js';
 import { ROLES } from '../../lib/constants.js';
 import { cartService } from '../../features/cart/services/cartService.js';
 import { queryKeys } from '../../lib/queryClient.js';
+import { getUserAvatarUrl } from '../../lib/utils.js';
 
 export const Navbar = () => {
   const navigate = useNavigate();
   const { user, role, isAuthenticated, logout } = useAuth();
+  const avatarUrl = getUserAvatarUrl(user);
 
   // Fetch cart data when authenticated as customer to show item badge
   const { data: cartData } = useQuery({
@@ -119,8 +121,14 @@ export const Navbar = () => {
                 {/* Account Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex h-9 items-center gap-2 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-semibold text-foreground shadow-2xs hover:border-primary/40 hover:bg-muted/40 focus:outline-none transition-all cursor-pointer">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-                      {user?.first_name ? user.first_name[0].toUpperCase() : <User size={13} />}
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground overflow-hidden shrink-0">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                      ) : user?.first_name ? (
+                        user.first_name[0].toUpperCase()
+                      ) : (
+                        <User size={13} />
+                      )}
                     </div>
                     <span className="hidden max-w-28 truncate sm:inline-block">
                       {user?.first_name ? `${user.first_name}` : user?.email?.split('@')[0] || 'Account'}
@@ -130,9 +138,20 @@ export const Navbar = () => {
                   <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl border border-border bg-card shadow-lg">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="font-normal px-2 py-1.5">
-                        <div className="flex flex-col space-y-0.5">
-                          <p className="text-xs font-bold leading-none text-foreground">{user?.first_name || 'My Account'}</p>
-                          <p className="text-[11px] leading-none text-muted-foreground truncate">{user?.email}</p>
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground overflow-hidden shrink-0">
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                            ) : user?.first_name ? (
+                              user.first_name[0].toUpperCase()
+                            ) : (
+                              <User size={12} />
+                            )}
+                          </div>
+                          <div className="flex flex-col space-y-0.5 min-w-0">
+                            <p className="text-xs font-bold leading-none text-foreground truncate">{user?.first_name || 'My Account'}</p>
+                            <p className="text-[11px] leading-none text-muted-foreground truncate">{user?.email}</p>
+                          </div>
                         </div>
                       </DropdownMenuLabel>
                     </DropdownMenuGroup>
