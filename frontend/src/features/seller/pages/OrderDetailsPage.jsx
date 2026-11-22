@@ -139,7 +139,7 @@ export const OrderDetailsPage = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl font-mono">
-              Order #{item.order_number || item.order?.slice(0, 8)}
+              Order #{item.order_number || (typeof item.order === 'object' && item.order !== null ? item.order.order_number || item.order.id?.slice(0, 8) : item.order?.slice?.(0, 8)) || item.id?.slice(0, 8)}
             </h1>
             {getStatusBadge(currentStatus)}
           </div>

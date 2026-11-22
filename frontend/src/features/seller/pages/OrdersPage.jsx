@@ -160,7 +160,7 @@ export const OrdersPage = () => {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/80 pb-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-mono text-sm font-bold text-foreground">
-                    #{item.order_number || item.order?.slice(0, 8)}
+                    #{item.order_number || (typeof item.order === 'object' && item.order !== null ? item.order.order_number || item.order.id?.slice(0, 8) : item.order?.slice?.(0, 8)) || item.id?.slice(0, 8)}
                   </span>
                   {getStatusBadge(currentStatus)}
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
