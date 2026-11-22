@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp,
   Package,
-  PlusCircle,
   Clock,
   ArrowRight,
   Loader2,
@@ -11,12 +10,7 @@ import {
   ChevronRight,
   ShieldCheck,
   CheckCircle2,
-  Receipt,
   Store,
-  Sparkles,
-  ShoppingBag,
-  Phone,
-  Layers,
 } from 'lucide-react';
 import { sellerService } from '../services/sellerService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
@@ -53,8 +47,8 @@ export const DashboardPage = () => {
 
   // Fetch recent order items awaiting fulfillment
   const { data: ordersData, isLoading: isOrdersLoading } = useQuery({
-    queryKey: queryKeys.orders.sellerList({ page_size: 5 }),
-    queryFn: () => sellerService.getOrderItems({ page_size: 5 }),
+    queryKey: queryKeys.orders.sellerList({ page_size: 6 }),
+    queryFn: () => sellerService.getOrderItems({ page_size: 6 }),
   });
 
   // Update order item status mutation
@@ -68,7 +62,7 @@ export const DashboardPage = () => {
 
   const orders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
   const totalProducts = productsData?.count ?? (Array.isArray(productsData) ? productsData.length : 0);
-  const storeName = profile?.business_name || (user?.first_name ? `${user.first_name}'s Studio` : 'Artisan Workshop');
+  const storeName = profile?.business_name || (user?.first_name ? `${user.first_name}'s Studio` : 'Artisan Studio');
 
   const getStatusBadge = (rawStatus) => {
     const status = (rawStatus || '').toLowerCase().trim();
@@ -99,202 +93,118 @@ export const DashboardPage = () => {
     return null;
   };
 
-  // Pending tasks count
   const pendingFulfillmentCount = orders.filter((o) => {
     const s = (o.status || o.fulfillment_status || '').toLowerCase();
     return s === 'pending' || s === 'confirmed' || s === 'processing';
   }).length;
 
   return (
-    <div className="space-y-8">
-      {/* 1. STUDIO HERO BANNER */}
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-xs">
-        {/* Subtle decorative gradient overlay */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-xs py-1 px-2.5 gap-1.5">
-                <Store size={13} className="text-primary" />
-                <span>{storeName}</span>
-              </Badge>
-              <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 font-bold text-xs py-1 px-2.5 gap-1">
-                <ShieldCheck size={13} />
-                <span>Verified Artisan Studio</span>
-              </Badge>
-            </div>
-
-            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl font-heading">
-              Welcome back, {user?.first_name || 'Artisan'}!
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground max-w-xl">
-              Here is your studio&apos;s daily operational summary. You have{' '}
-              <strong className="text-foreground">{pendingFulfillmentCount} order items</strong> awaiting package dispatch.
-            </p>
+    <div className="space-y-6">
+      {/* 1. COMPACT GREETING HEADER */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/80 pb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-bold text-xs text-primary flex items-center gap-1">
+              <Store size={13} />
+              {storeName}
+            </span>
+            <span className="text-muted-foreground/40">•</span>
+            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+              <ShieldCheck size={12} />
+              Verified Studio
+            </span>
           </div>
-
-          {/* Quick Header Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button asChild size="default" className="rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-4 gap-2 shadow-xs cursor-pointer">
-              <Link to={ROUTE_PATHS.SELLER.CREATE_PRODUCT}>
-                <PlusCircle size={15} />
-                <span>New Listing</span>
-              </Link>
-            </Button>
-
-            <Button asChild variant="outline" size="default" className="rounded-xl font-semibold text-xs px-4 border-border hover:border-primary/40 gap-2 cursor-pointer">
-              <Link to={ROUTE_PATHS.SELLER.ORDERS}>
-                <ShoppingBag size={15} className="text-primary" />
-                <span>Fulfillment Orders</span>
-              </Link>
-            </Button>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+            Welcome, {user?.first_name || 'Artisan'}
+          </h1>
         </div>
+
+        {pendingFulfillmentCount > 0 ? (
+          <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-xs py-1 px-3 self-start sm:self-auto">
+            {pendingFulfillmentCount} {pendingFulfillmentCount === 1 ? 'order' : 'orders'} to fulfill
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-border text-muted-foreground text-xs py-1 px-3 self-start sm:self-auto">
+            All orders fulfilled
+          </Badge>
+        )}
       </div>
 
       {/* 2. KPI METRICS CARDS */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {/* Gross Revenue */}
-        <Card className="rounded-2xl border border-border bg-card p-5 space-y-3 shadow-2xs hover:border-primary/40 transition-all">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        {/* Gross Sales */}
+        <Card className="rounded-2xl border border-border bg-card p-4 space-y-2 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground">Gross Revenue</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <TrendingUp size={18} />
+            <span className="text-xs font-semibold text-muted-foreground">Gross Sales</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <TrendingUp size={16} />
             </div>
           </div>
-          <div>
-            <PriceDisplay
-              price={earnings?.total_gross_earnings || 0}
-              size="lg"
-              className="text-2xl font-black text-foreground"
-            />
-            <p className="text-[11px] text-muted-foreground mt-0.5">Total customer orders value</p>
-          </div>
+          <PriceDisplay
+            price={earnings?.total_gross_earnings || 0}
+            size="lg"
+            className="text-xl sm:text-2xl font-black text-foreground block"
+          />
         </Card>
 
         {/* Net Earnings */}
-        <Card className="rounded-2xl border border-border bg-card p-5 space-y-3 shadow-2xs hover:border-emerald-500/40 transition-all">
+        <Card className="rounded-2xl border border-border bg-card p-4 space-y-2 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground">Net Earnings</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
-              <DollarSign size={18} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+              <DollarSign size={16} />
             </div>
           </div>
-          <div>
-            <PriceDisplay
-              price={earnings?.total_net_earnings || 0}
-              size="lg"
-              className="text-2xl font-black text-emerald-600 dark:text-emerald-400"
-            />
-            <p className="text-[11px] text-muted-foreground mt-0.5">After platform commission</p>
-          </div>
+          <PriceDisplay
+            price={earnings?.total_net_earnings || 0}
+            size="lg"
+            className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 block"
+          />
         </Card>
 
         {/* Pending Payout */}
-        <Card className="rounded-2xl border border-border bg-card p-5 space-y-3 shadow-2xs hover:border-amber-500/40 transition-all">
+        <Card className="rounded-2xl border border-border bg-card p-4 space-y-2 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground">Pending Payout</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
-              <Clock size={18} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+              <Clock size={16} />
             </div>
           </div>
-          <div>
-            <PriceDisplay
-              price={earnings?.pending_payout_balance || 0}
-              size="lg"
-              className="text-2xl font-black text-amber-600 dark:text-amber-400"
-            />
-            <p className="text-[11px] text-muted-foreground mt-0.5">Ready for next settlement</p>
-          </div>
+          <PriceDisplay
+            price={earnings?.pending_payout_balance || 0}
+            size="lg"
+            className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 block"
+          />
         </Card>
 
-        {/* Live Catalog */}
-        <Card className="rounded-2xl border border-border bg-card p-5 space-y-3 shadow-2xs hover:border-blue-500/40 transition-all">
+        {/* Active Products */}
+        <Card className="rounded-2xl border border-border bg-card p-4 space-y-2 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground">Live Catalog</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
-              <Package size={18} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
+              <Package size={16} />
             </div>
           </div>
-          <div>
-            <p className="text-2xl font-black text-foreground">{totalProducts}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Artisan creations listed</p>
-          </div>
+          <p className="text-xl sm:text-2xl font-black text-foreground">
+            {totalProducts}
+          </p>
         </Card>
       </div>
 
-      {/* 3. QUICK WORKFLOW SHORTCUTS */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Link
-          to={ROUTE_PATHS.SELLER.PRODUCTS}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-muted/30 transition-all group"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            <Layers size={18} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-foreground truncate">Manage Catalog</p>
-            <p className="text-[11px] text-muted-foreground truncate">Stock & listings</p>
-          </div>
-        </Link>
-
-        <Link
-          to={ROUTE_PATHS.SELLER.ORDERS}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-muted/30 transition-all group"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            <ShoppingBag size={18} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-foreground truncate">Order Queue</p>
-            <p className="text-[11px] text-muted-foreground truncate">Dispatch packages</p>
-          </div>
-        </Link>
-
-        <Link
-          to={ROUTE_PATHS.SELLER.PAYOUT_HISTORY}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-muted/30 transition-all group"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            <Receipt size={18} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-foreground truncate">Payout Ledger</p>
-            <p className="text-[11px] text-muted-foreground truncate">Bank settlements</p>
-          </div>
-        </Link>
-
-        <Link
-          to={ROUTE_PATHS.SELLER.PROFILE}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-muted/30 transition-all group"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            <Store size={18} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-foreground truncate">Store Profile</p>
-            <p className="text-[11px] text-muted-foreground truncate">Business settings</p>
-          </div>
-        </Link>
-      </div>
-
-      {/* 4. BALANCED MAIN SECTION: FULFILLMENT QUEUE & FINANCIAL HEALTH */}
+      {/* 3. MAIN DASHBOARD CONTENT */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-        {/* Left Column: Fulfillment Queue (8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          <Card className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex items-center justify-between border-b border-border pb-4">
+        {/* Fulfillment Queue (8 cols) */}
+        <div className="lg:col-span-8">
+          <Card className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div>
-                <h2 className="text-lg font-bold text-foreground">Fulfillment Queue</h2>
-                <p className="text-xs text-muted-foreground">
-                  Orders requiring preparation, packing, and shipment handover.
-                </p>
+                <h2 className="text-base font-bold text-foreground">Fulfillment Queue</h2>
+                <p className="text-xs text-muted-foreground">Orders awaiting processing or shipment</p>
               </div>
 
-              <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary gap-1 cursor-pointer">
+              <Button asChild variant="ghost" size="sm" className="text-xs font-semibold text-primary gap-1 cursor-pointer h-8">
                 <Link to={ROUTE_PATHS.SELLER.ORDERS}>
-                  <span>View All Orders</span>
+                  <span>All Orders</span>
                   <ArrowRight size={13} />
                 </Link>
               </Button>
@@ -303,20 +213,16 @@ export const DashboardPage = () => {
             {isOrdersLoading ? (
               <div className="py-12 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin text-primary" />
-                <span>Loading fulfillment orders...</span>
+                <span>Loading orders...</span>
               </div>
             ) : orders.length === 0 ? (
-              <div className="py-14 text-center space-y-3">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                  <Package size={24} />
-                </div>
-                <p className="text-sm font-semibold text-foreground">All caught up! No pending fulfillments</p>
-                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                  When customers purchase your handcrafted items, they will appear here ready for packaging.
-                </p>
+              <div className="py-12 text-center space-y-2">
+                <Package size={28} className="mx-auto text-muted-foreground/40" />
+                <p className="text-sm font-semibold text-foreground">No orders pending fulfillment</p>
+                <p className="text-xs text-muted-foreground">New customer orders will appear here.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/70">
                 {orders.map((item) => {
                   const currentStatus = (item.status || item.fulfillment_status || 'pending').toLowerCase().trim();
                   const action = getNextStatusAction(currentStatus);
@@ -324,45 +230,44 @@ export const DashboardPage = () => {
                   const itemImg = getProductImageUrl(item.product?.primary_image?.image || item.image || item.product?.image);
 
                   return (
-                    <div key={item.id} className="py-4.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex items-center gap-3.5 min-w-0">
+                    <div key={item.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         {/* Thumbnail */}
-                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-border bg-muted/40">
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-border bg-muted/40">
                           {itemImg ? (
                             <img src={itemImg} alt={item.product_name} className="h-full w-full object-cover" />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-muted-foreground/50">
-                              <Package size={16} />
+                            <div className="flex h-full w-full items-center justify-center text-muted-foreground/40">
+                              <Package size={15} />
                             </div>
                           )}
                         </div>
 
                         {/* Details */}
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-0.5 min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-xs font-bold text-foreground">
-                              #{item.order_number || item.order?.slice(0, 8)}
+                              #{item.order_number || item.id?.slice(0, 8)}
                             </span>
                             {getStatusBadge(currentStatus)}
                           </div>
 
-                          <p className="text-xs font-bold text-foreground truncate max-w-md">
+                          <p className="text-xs font-bold text-foreground truncate max-w-sm">
                             {item.product_name}
                           </p>
 
-                          <p className="text-[11px] text-muted-foreground">
-                            Qty: <strong className="text-foreground">{item.quantity}</strong> • Deliver to:{' '}
-                            <span className="text-foreground font-medium">{item.shipping_full_name}</span> ({item.shipping_city}, {item.shipping_state})
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            Qty: <strong className="text-foreground">{item.quantity}</strong> • {item.shipping_full_name} ({item.shipping_city})
                           </p>
                         </div>
                       </div>
 
                       {/* Right Action buttons */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t border-border/50 sm:border-0">
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0">
                         <PriceDisplay
                           price={item.subtotal || (parseFloat(item.unit_price) * item.quantity)}
                           size="md"
-                          className="font-black text-foreground"
+                          className="font-extrabold text-foreground"
                         />
 
                         {action && (
@@ -371,21 +276,21 @@ export const DashboardPage = () => {
                             size="sm"
                             onClick={() => updateStatusMutation.mutate({ id: item.id, status: action.next })}
                             disabled={isItemPending}
-                            className="h-8 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-3 shadow-2xs cursor-pointer gap-1.5"
+                            className="h-7 rounded-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-2.5 shadow-2xs cursor-pointer gap-1"
                           >
                             {isItemPending ? (
-                              <Loader2 size={12} className="animate-spin" />
+                              <Loader2 size={11} className="animate-spin" />
                             ) : (
-                              <CheckCircle2 size={12} />
+                              <CheckCircle2 size={11} />
                             )}
                             <span>{action.label}</span>
                           </Button>
                         )}
 
-                        <Button asChild variant="outline" size="sm" className="h-8 rounded-xl text-xs font-semibold border-border gap-1 cursor-pointer">
+                        <Button asChild variant="outline" size="sm" className="h-7 rounded-lg text-xs font-medium border-border px-2.5 cursor-pointer">
                           <Link to={ROUTE_PATHS.SELLER.ORDER_DETAILS(item.id)}>
                             <span>Details</span>
-                            <ChevronRight size={12} />
+                            <ChevronRight size={11} />
                           </Link>
                         </Button>
                       </div>
@@ -397,86 +302,44 @@ export const DashboardPage = () => {
           </Card>
         </div>
 
-        {/* Right Column: Studio Financial Health & Store Status (4 cols) */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Financial Snapshot */}
-          <Card className="rounded-3xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2">
-                <DollarSign size={16} className="text-primary" />
-                <h3 className="text-sm font-bold text-foreground">Financial Health</h3>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-semibold">Weekly Cycle</Badge>
+        {/* Financial Summary (4 cols) */}
+        <div className="lg:col-span-4">
+          <Card className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <h3 className="text-sm font-bold text-foreground">Financial Overview</h3>
+              <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">Weekly</Badge>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Settlement Balance</span>
-                <PriceDisplay price={earnings?.pending_payout_balance || 0} size="sm" className="font-bold text-foreground" />
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-muted-foreground">Gross Sales</span>
+                <PriceDisplay price={earnings?.total_gross_earnings || 0} size="sm" className="font-semibold text-foreground" />
               </div>
 
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Total Payouts Settled</span>
-                <PriceDisplay price={earnings?.already_paid || earnings?.total_payouts_completed || 0} size="sm" className="font-bold text-emerald-600" />
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Platform Fee Deducted</span>
+              <div className="flex items-center justify-between py-1">
+                <span className="text-muted-foreground">Platform Commission</span>
                 <PriceDisplay price={earnings?.total_commission_deducted || 0} size="sm" className="font-semibold text-muted-foreground" />
               </div>
 
-              <div className="rounded-2xl border border-border/80 bg-muted/20 p-3.5 space-y-1.5">
-                <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles size={12} className="text-primary" />
-                  <span>Platform Settlements</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Payouts are settled directly into your registered bank account with complete audit logs.
-                </p>
+              <div className="flex items-center justify-between py-1 border-t border-border/60 pt-2 font-bold">
+                <span className="text-foreground">Net Earnings</span>
+                <PriceDisplay price={earnings?.total_net_earnings || 0} size="sm" className="text-emerald-600 font-bold" />
               </div>
 
-              <Button asChild variant="outline" size="sm" className="w-full rounded-xl text-xs font-semibold justify-between border-border cursor-pointer">
-                <Link to={ROUTE_PATHS.SELLER.EARNINGS_DASHBOARD}>
-                  <span>View Earnings & Commission</span>
-                  <ChevronRight size={13} />
-                </Link>
-              </Button>
-            </div>
-          </Card>
-
-          {/* Artisan Quality & Studio Checklist */}
-          <Card className="rounded-3xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 border-b border-border pb-3">
-              <ShieldCheck size={16} className="text-primary" />
-              <h3 className="text-sm font-bold text-foreground">Studio Status</h3>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-                  <CheckCircle2 size={13} />
-                </div>
-                <span className="text-foreground font-medium">Artisan Verification Approved</span>
+              <div className="flex items-center justify-between py-1">
+                <span className="text-muted-foreground">Already Paid Out</span>
+                <PriceDisplay price={earnings?.already_paid || 0} size="sm" className="font-semibold text-foreground" />
               </div>
 
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-                  <CheckCircle2 size={13} />
-                </div>
-                <span className="text-foreground font-medium">Public Storefront Active</span>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Sparkles size={13} />
-                </div>
-                <span className="text-foreground font-medium">Fast Fulfillment Guarantee</span>
+              <div className="flex items-center justify-between py-1 bg-amber-500/10 rounded-xl px-3 text-amber-700 dark:text-amber-400 font-bold">
+                <span>Available Settlement</span>
+                <PriceDisplay price={earnings?.pending_payout_balance || 0} size="sm" className="font-extrabold" />
               </div>
 
               <div className="pt-2">
-                <Button asChild variant="ghost" size="sm" className="w-full rounded-xl text-xs font-semibold justify-between text-primary hover:bg-primary/10 cursor-pointer">
-                  <Link to={ROUTE_PATHS.SELLER.PROFILE}>
-                    <span>Edit Store Information</span>
+                <Button asChild variant="outline" size="sm" className="w-full rounded-xl text-xs font-semibold justify-between border-border cursor-pointer h-8">
+                  <Link to={ROUTE_PATHS.SELLER.PAYOUT_HISTORY}>
+                    <span>View Payout History</span>
                     <ChevronRight size={13} />
                   </Link>
                 </Button>

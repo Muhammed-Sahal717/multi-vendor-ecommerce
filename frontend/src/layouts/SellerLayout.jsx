@@ -412,9 +412,6 @@ export const SellerLayout = () => {
               <h1 className="text-sm font-extrabold text-foreground sm:text-base tracking-tight">
                 {getCurrentPageTitle()}
               </h1>
-              <p className="hidden sm:block text-[11px] text-muted-foreground">
-                Artisan Studio Operations & Fulfillment
-              </p>
             </div>
           </div>
 
@@ -468,16 +465,9 @@ export const SellerLayout = () => {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-muted/10">
-          <div className="mx-auto max-w-7xl space-y-6">
+          <div className="mx-auto max-w-7xl">
             <Outlet />
           </div>
-
-          <footer className="py-6 border-t border-border/60 text-center text-xs text-muted-foreground mt-12">
-            <div className="flex items-center justify-center gap-1.5 font-medium">
-              <Sparkles size={13} className="text-primary" />
-              <span>GALLA. Artisan Studio Management & Fulfillment</span>
-            </div>
-          </footer>
         </main>
       </div>
     </div>
