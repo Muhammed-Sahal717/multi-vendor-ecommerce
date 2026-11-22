@@ -25,9 +25,9 @@ import { Badge } from '../../../components/ui/badge.jsx';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 
 const VALID_TRANSITIONS = {
-  pending: ['confirmed', 'processing', 'cancelled'],
-  confirmed: ['processing', 'shipped', 'cancelled'],
-  processing: ['shipped', 'delivered', 'cancelled'],
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['processing', 'cancelled'],
+  processing: ['shipped', 'cancelled'],
   shipped: ['delivered'],
   delivered: [],
   cancelled: [],

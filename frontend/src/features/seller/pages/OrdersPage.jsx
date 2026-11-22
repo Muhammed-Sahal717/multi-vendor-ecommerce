@@ -47,7 +47,10 @@ export const OrdersPage = () => {
     },
   });
 
-  const orders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
+  const rawOrders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
+  const orders = selectedStatus
+    ? rawOrders.filter((item) => (item.status || item.fulfillment_status || '').toLowerCase().trim() === selectedStatus.toLowerCase().trim())
+    : rawOrders;
 
   const getStatusBadge = (rawStatus) => {
     const status = (rawStatus || '').toLowerCase().trim();
