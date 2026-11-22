@@ -47,7 +47,6 @@ import SellerEarningsDashboardPage from '../features/seller/pages/EarningsDashbo
 import SellerEarningsHistoryPage from '../features/seller/pages/EarningsHistoryPage.jsx';
 import SellerPayoutHistoryPage from '../features/seller/pages/PayoutHistoryPage.jsx';
 import SellerProfilePage from '../features/seller/pages/SellerProfilePage.jsx';
-import SellerApplicationPage from '../features/seller/pages/SellerApplicationPage.jsx';
 
 // Admin Pages
 import AdminDashboardPage from '../features/admin/pages/DashboardPage.jsx';
@@ -83,6 +82,10 @@ export const router = createBrowserRouter([
           { path: 'categories', element: <Navigate to="/products" replace /> },
           { path: 'categories/:slug', element: <Navigate to="/products" replace /> },
           { path: 'cart', element: <CartPage /> },
+          {
+            path: 'seller/apply',
+            element: <Navigate to="/customer/profile" replace />,
+          },
           {
             element: <ProtectedRoute />,
             children: [
@@ -144,7 +147,6 @@ export const router = createBrowserRouter([
           { path: 'earnings/history', element: <SellerEarningsHistoryPage /> },
           { path: 'payouts', element: <SellerPayoutHistoryPage /> },
           { path: 'profile', element: <SellerProfilePage /> },
-          { path: 'apply', element: <SellerApplicationPage /> },
         ],
       },
 

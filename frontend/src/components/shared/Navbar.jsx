@@ -80,31 +80,23 @@ export const Navbar = () => {
           {/* Left: Brand Logo & Navigation Links */}
           <div className="flex items-center gap-6 lg:gap-8 shrink-0">
             <Logo imgClassName="h-8 w-8 sm:h-9 sm:w-9" textClassName="text-xl sm:text-2xl" />
-            <nav className="hidden items-center gap-5 text-xs font-bold uppercase tracking-wider text-muted-foreground md:flex">
+            <nav className="flex items-center gap-5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <Link
                 to={ROUTE_PATHS.STOREFRONT.PRODUCTS}
                 className="transition-colors hover:text-primary"
               >
                 Products
               </Link>
-              {!isSeller && !isAdmin && (
-                <Link
-                  to={ROUTE_PATHS.SELLER.APPLICATION}
-                  className="transition-colors hover:text-primary"
-                >
-                  Sell on Galla
-                </Link>
-              )}
             </nav>
           </div>
 
           {/* Center: Search bar */}
-          <div className="hidden max-w-md flex-1 md:block mx-2 lg:mx-4">
+          <div className="hidden max-w-lg flex-1 md:block mx-4 lg:mx-8">
             <SearchInput />
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {/* Shopping Cart Button */}
             <Button
               asChild
@@ -243,8 +235,8 @@ export const Navbar = () => {
           </div>
         </div>
 
-        {/* Mobile Search input bar */}
-        <div className="border-t border-border p-2.5 md:hidden bg-card">
+        {/* Mobile Search bar */}
+        <div className="border-t border-border/70 px-4 py-2.5 md:hidden bg-card/95">
           <SearchInput />
         </div>
       </header>
