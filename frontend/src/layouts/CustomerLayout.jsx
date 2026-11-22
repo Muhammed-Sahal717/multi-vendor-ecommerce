@@ -79,9 +79,14 @@ export const CustomerLayout = () => {
       <main className="flex-1 py-6 sm:py-8">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
           {/* 1. Header Profile Banner Card */}
-          <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-7 shadow-sm">
-            {/* Subtle atmospheric brand background accent */}
-            <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-6 sm:p-7 shadow-sm">
+            {/* Abstract White-Orange Wavy Background Image */}
+            <div
+              className="absolute inset-0 bg-cover bg-center pointer-events-none opacity-85 dark:opacity-35"
+              style={{ backgroundImage: `url('/footer-bg.jpg')` }}
+            />
+            {/* Subtle Glass/Card Overlay for Crisp Typography & Contrast */}
+            <div className="absolute inset-0 bg-gradient-to-r from-card/95 via-card/85 to-card/70 backdrop-blur-[1px] pointer-events-none" />
 
             <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               {/* User Avatar + Details */}
