@@ -52,7 +52,8 @@ export const DashboardPage = () => {
   const orders = Array.isArray(ordersData) ? ordersData : ordersData?.results || [];
   const totalProducts = productsData?.count ?? (Array.isArray(productsData) ? productsData.length : 0);
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (rawStatus) => {
+    const status = (rawStatus || '').toLowerCase().trim();
     switch (status) {
       case 'delivered':
         return <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 font-bold text-xs py-0.5">Delivered</Badge>;
@@ -62,6 +63,8 @@ export const DashboardPage = () => {
         return <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-xs py-0.5">Processing</Badge>;
       case 'confirmed':
         return <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-xs py-0.5">Confirmed</Badge>;
+      case 'pending':
+        return <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 text-orange-600 font-bold text-xs py-0.5">Pending</Badge>;
       case 'cancelled':
         return <Badge variant="destructive" className="font-bold text-xs py-0.5">Cancelled</Badge>;
       default:
@@ -70,9 +73,11 @@ export const DashboardPage = () => {
   };
 
   const getNextStatusAction = (currentStatus) => {
-    if (currentStatus === 'confirmed') return { next: 'processing', label: 'Mark Processing' };
-    if (currentStatus === 'processing') return { next: 'shipped', label: 'Mark Shipped' };
-    if (currentStatus === 'shipped') return { next: 'delivered', label: 'Mark Delivered' };
+    const status = (currentStatus || '').toLowerCase().trim();
+    if (status === 'pending') return { next: 'confirmed', label: 'Confirm Order' };
+    if (status === 'confirmed') return { next: 'processing', label: 'Start Processing' };
+    if (status === 'processing') return { next: 'shipped', label: 'Mark Shipped' };
+    if (status === 'shipped') return { next: 'delivered', label: 'Mark Delivered' };
     return null;
   };
 
@@ -189,7 +194,10 @@ export const DashboardPage = () => {
         ) : (
           <div className="divide-y divide-border">
             {orders.map((item) => {
-              const action = getNextStatusAction(item.status);
+              const currentStatus = (item.status || item.fulfillment_status || 'pending').toLowerCase().trim();
+              const action = getNextStatusAction(currentStatus);
+              const isItemPending = updateStatusMutation.isPending && updateStatusMutation.variables?.id === item.id;
+
               return (
                 <div key={item.id} className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="space-y-1">
@@ -197,7 +205,7 @@ export const DashboardPage = () => {
                       <span className="font-mono text-xs font-bold text-foreground">
                         Order #{item.order_number || item.order?.slice(0, 8)}
                       </span>
-                      {getStatusBadge(item.status)}
+                      {getStatusBadge(currentStatus)}
                     </div>
 
                     <p className="text-sm font-bold text-foreground line-clamp-1">{item.product_name}</p>
@@ -214,10 +222,11 @@ export const DashboardPage = () => {
                         type="button"
                         size="sm"
                         onClick={() => updateStatusMutation.mutate({ id: item.id, status: action.next })}
-                        disabled={updateStatusMutation.isPending}
-                        className="h-8 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-3 shadow-2xs cursor-pointer"
+                        disabled={isItemPending}
+                        className="h-8 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 text-xs px-3 shadow-2xs cursor-pointer gap-1.5"
                       >
-                        {action.label}
+                        {isItemPending && <Loader2 size={12} className="animate-spin" />}
+                        <span>{action.label}</span>
                       </Button>
                     )}
 

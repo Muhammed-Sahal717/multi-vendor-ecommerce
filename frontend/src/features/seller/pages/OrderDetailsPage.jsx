@@ -12,6 +12,9 @@ import {
   Loader2,
   Truck,
   ShieldCheck,
+  XCircle,
+  Clock,
+  Check,
 } from 'lucide-react';
 import { sellerService } from '../services/sellerService.js';
 import { queryKeys } from '../../../lib/queryClient.js';
@@ -22,12 +25,21 @@ import { Badge } from '../../../components/ui/badge.jsx';
 import { PriceDisplay } from '../../../components/common/PriceDisplay.jsx';
 
 const VALID_TRANSITIONS = {
-  confirmed: ['processing', 'cancelled'],
-  processing: ['shipped', 'cancelled'],
+  pending: ['confirmed', 'processing', 'cancelled'],
+  confirmed: ['processing', 'shipped', 'cancelled'],
+  processing: ['shipped', 'delivered', 'cancelled'],
   shipped: ['delivered'],
   delivered: [],
   cancelled: [],
 };
+
+const FULFILLMENT_STEPS = [
+  { key: 'pending', label: 'Order Placed' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'processing', label: 'Processing' },
+  { key: 'shipped', label: 'Shipped' },
+  { key: 'delivered', label: 'Delivered' },
+];
 
 export const OrderDetailsPage = () => {
   const { id } = useParams();
@@ -50,7 +62,7 @@ export const OrderDetailsPage = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.sellerDetail(id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.seller.dashboard() });
-      setUpdateSuccess(`Order status updated to "${updated.status || 'updated'}"!`);
+      setUpdateSuccess(`Order fulfillment status updated to "${updated?.status || 'updated'}"!`);
       setUpdateError('');
       setTimeout(() => setUpdateSuccess(''), 4000);
     },
@@ -90,7 +102,28 @@ export const OrderDetailsPage = () => {
     );
   }
 
-  const nextTransitions = VALID_TRANSITIONS[item.status] || [];
+  const currentStatus = (item.status || item.fulfillment_status || 'pending').toLowerCase().trim();
+  const nextTransitions = VALID_TRANSITIONS[currentStatus] || [];
+  const currentStepIndex = FULFILLMENT_STEPS.findIndex((s) => s.key === currentStatus);
+  const isCancelled = currentStatus === 'cancelled';
+  const isDelivered = currentStatus === 'delivered';
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'delivered':
+        return <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 font-bold text-xs py-0.5">Delivered</Badge>;
+      case 'shipped':
+        return <Badge variant="outline" className="border-blue-500/40 bg-blue-500/10 text-blue-600 font-bold text-xs py-0.5">Shipped</Badge>;
+      case 'processing':
+        return <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-xs py-0.5">Processing</Badge>;
+      case 'confirmed':
+        return <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-xs py-0.5">Confirmed</Badge>;
+      case 'cancelled':
+        return <Badge variant="destructive" className="font-bold text-xs py-0.5">Cancelled</Badge>;
+      default:
+        return <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-xs py-0.5">Pending</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -104,12 +137,22 @@ export const OrderDetailsPage = () => {
           <span>Back to Fulfillment List</span>
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl font-mono">
-            Order #{item.order_number || item.order?.slice(0, 8)}
-          </h1>
-          <Badge variant="outline" className="text-xs font-bold capitalize py-0.5">
-            {item.status}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl font-mono">
+              Order #{item.order_number || item.order?.slice(0, 8)}
+            </h1>
+            {getStatusBadge(currentStatus)}
+          </div>
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <Calendar size={13} />
+            {item.order_date
+              ? new Date(item.order_date).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : 'Recent Order'}
+          </span>
         </div>
       </div>
 
@@ -127,41 +170,119 @@ export const OrderDetailsPage = () => {
         </div>
       )}
 
-      {/* Fulfillment Status Advance Actions */}
-      {nextTransitions.length > 0 && (
-        <Card className="p-6 rounded-2xl border border-primary/20 bg-primary/5 space-y-3 shadow-xs">
+      {/* Fulfillment Progress Stepper */}
+      {!isCancelled && (
+        <Card className="p-6 rounded-2xl border border-border bg-card space-y-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Fulfillment Journey
+          </h2>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+            {FULFILLMENT_STEPS.map((step, idx) => {
+              const isCompleted = idx <= currentStepIndex;
+              const isCurrent = idx === currentStepIndex;
+
+              return (
+                <div key={step.key} className="flex flex-col items-center text-center space-y-1.5">
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                      isCurrent
+                        ? 'bg-primary text-primary-foreground ring-4 ring-primary/20 shadow-xs'
+                        : isCompleted
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {isCompleted ? <Check size={15} className="stroke-[2.5]" /> : idx + 1}
+                  </div>
+                  <span
+                    className={`text-xs ${
+                      isCurrent
+                        ? 'text-foreground font-bold'
+                        : isCompleted
+                        ? 'text-foreground font-semibold'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Fulfillment Status Advance Actions Panel */}
+      <Card className="p-6 rounded-2xl border border-primary/20 bg-primary/5 space-y-4 shadow-xs">
+        <div className="flex items-center justify-between border-b border-primary/15 pb-3">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
             <Truck size={16} />
             <span>Update Fulfillment Stage</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Current status: <strong className="text-foreground capitalize">{item.status}</strong>. Advance the fulfillment status as you process and package this item:
-          </p>
+          <span className="text-xs text-muted-foreground">
+            Current Stage: <strong className="text-foreground capitalize">{currentStatus}</strong>
+          </span>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 pt-1">
-            {nextTransitions.map((nextStatus) => (
-              <Button
-                key={nextStatus}
-                type="button"
-                onClick={() => updateStatusMutation.mutate(nextStatus)}
-                disabled={updateStatusMutation.isPending}
-                variant={nextStatus === 'cancelled' ? 'outline' : 'default'}
-                className={`rounded-xl text-xs font-bold h-9 px-4 cursor-pointer capitalize ${
-                  nextStatus === 'cancelled'
-                    ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                }`}
-              >
-                {updateStatusMutation.isPending ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <span>Mark as {nextStatus}</span>
-                )}
-              </Button>
-            ))}
+        {nextTransitions.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Select the next status to advance the delivery workflow:
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {nextTransitions.map((nextStatus) => {
+                const isCancel = nextStatus === 'cancelled';
+                let label = `Mark as ${nextStatus}`;
+                if (nextStatus === 'confirmed') label = 'Confirm Order';
+                if (nextStatus === 'processing') label = 'Start Processing';
+                if (nextStatus === 'shipped') label = 'Mark as Shipped';
+                if (nextStatus === 'delivered') label = 'Mark as Delivered';
+                if (nextStatus === 'cancelled') label = 'Cancel Item';
+
+                return (
+                  <Button
+                    key={nextStatus}
+                    type="button"
+                    onClick={() => updateStatusMutation.mutate(nextStatus)}
+                    disabled={updateStatusMutation.isPending}
+                    variant={isCancel ? 'outline' : 'default'}
+                    className={`rounded-xl text-xs font-bold h-10 px-5 cursor-pointer capitalize shadow-xs gap-1.5 ${
+                      isCancel
+                        ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
+                        : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    }`}
+                  >
+                    {updateStatusMutation.isPending ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : isCancel ? (
+                      <XCircle size={14} />
+                    ) : (
+                      <CheckCircle2 size={14} />
+                    )}
+                    <span>{label}</span>
+                  </Button>
+                );
+              })}
+            </div>
           </div>
-        </Card>
-      )}
+        ) : isDelivered ? (
+          <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+            <CheckCircle2 size={16} />
+            <span>This order item has been delivered to the customer. Fulfillment is complete.</span>
+          </div>
+        ) : isCancelled ? (
+          <div className="flex items-center gap-2 text-xs text-destructive font-semibold bg-destructive/10 p-3 rounded-xl border border-destructive/20">
+            <XCircle size={16} />
+            <span>This order item has been cancelled.</span>
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            No further fulfillment actions available for this stage.
+          </div>
+        )}
+      </Card>
 
       {/* Order Item & Buyer Details */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
