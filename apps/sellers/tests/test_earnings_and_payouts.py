@@ -317,8 +317,8 @@ class SellerEarningsAndPayoutTests(APITestCase):
         from apps.cart.models import Cart, CartItem
 
         cart, _ = Cart.objects.get_or_create(user=self.customer)
-        CartItem.objects.create(cart=cart, product=self.product_a, quantity=2)  # ₹2000
-        CartItem.objects.create(cart=cart, product=self.product_b, quantity=2)  # ₹1000
+        CartItem.objects.create(cart=cart, product=self.product_a, quantity=1)  # ₹1000
+        CartItem.objects.create(cart=cart, product=self.product_b, quantity=1)  # ₹500
 
         order = create_order(
             user=self.customer,
@@ -358,9 +358,9 @@ class SellerEarningsAndPayoutTests(APITestCase):
         # Seller A has 1 earning
         self.assertTrue(SellerEarning.objects.filter(order_item=item_a).exists())
         earning_a = SellerEarning.objects.get(order_item=item_a)
-        self.assertEqual(earning_a.gross_amount, Decimal("2000.00"))
-        self.assertEqual(earning_a.commission_amount, Decimal("100.00"))
-        self.assertEqual(earning_a.net_amount, Decimal("1900.00"))
+        self.assertEqual(earning_a.gross_amount, Decimal("1000.00"))
+        self.assertEqual(earning_a.commission_amount, Decimal("50.00"))
+        self.assertEqual(earning_a.net_amount, Decimal("950.00"))
 
         # Seller B has ZERO earnings
         self.assertFalse(SellerEarning.objects.filter(seller=self.seller_b).exists())

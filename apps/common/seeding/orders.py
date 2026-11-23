@@ -93,14 +93,14 @@ def seed_orders(customers: list, admin_user) -> dict[str, any]:
         # 4. Multi-seller Delivered COD (Admin Confirmed)
         {
             "customer_idx": 3,
-            "skus": ["COCHIN-PWR-002", "MALABAR-WOD-002"],
+            "skus": ["MALABAR-CLY-004", "GRNVAL-OIL-001"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_delivered",
         },
         # 5. Single-seller Delivered COD (Admin Confirmed)
         {
             "customer_idx": 4,
-            "skus": ["WEAVES-KRT-002"],
+            "skus": ["WEAVES-MND-003"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_delivered",
         },
@@ -149,7 +149,7 @@ def seed_orders(customers: list, admin_user) -> dict[str, any]:
         # 12. Multi-seller Processing COD
         {
             "customer_idx": 11,
-            "skus": ["COCHIN-AUD-005", "GRNVAL-OIL-001"],
+            "skus": ["COCHIN-ACC-003", "GRNVAL-OIL-001"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_processing",
         },
@@ -184,14 +184,14 @@ def seed_orders(customers: list, admin_user) -> dict[str, any]:
         # 17. Multi-seller Partially Cancelled COD (Item 1 cancelled, Item 2 delivered & confirmed)
         {
             "customer_idx": 2,
-            "skus": ["WEAVES-DUP-006", "MALABAR-BOK-008"],
+            "skus": ["WEAVES-BAG-005", "MALABAR-BOK-008"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_partial_delivered",
         },
         # 18. Multi-seller In-flight Partial Cancellation (Item 1 cancelled, Item 2 confirmed)
         {
             "customer_idx": 3,
-            "skus": ["COCHIN-PWR-002", "GRNVAL-OIL-002"],
+            "skus": ["COCHIN-ACC-003", "GRNVAL-OIL-002"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_partial_inflight",
         },
@@ -219,7 +219,7 @@ def seed_orders(customers: list, admin_user) -> dict[str, any]:
         # 22. Multi-seller Delivered COD
         {
             "customer_idx": 7,
-            "skus": ["COCHIN-ACC-004", "WEAVES-KRT-002"],
+            "skus": ["COCHIN-ACC-003", "WEAVES-BAG-005"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_delivered",
         },
@@ -240,7 +240,7 @@ def seed_orders(customers: list, admin_user) -> dict[str, any]:
         # 25. Multi-seller Delivered COD
         {
             "customer_idx": 10,
-            "skus": ["WEAVES-SAR-001", "COCHIN-AUD-005"],
+            "skus": ["MALABAR-COR-005", "GRNVAL-SOP-005"],
             "method": Order.PaymentMethod.COD,
             "flow": "cod_delivered",
         },
