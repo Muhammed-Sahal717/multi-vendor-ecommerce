@@ -79,7 +79,7 @@ export const OrdersPage = () => {
       case 'processing':
       case 'confirmed':
         return (
-          <Badge variant="outline" className="border-indigo-500/40 bg-indigo-500/10 text-indigo-600 font-bold text-xs py-0.5 gap-1">
+          <Badge variant="outline" className="border-accent/40 bg-accent/10 text-accent font-bold text-xs py-0.5 gap-1">
             <Package size={11} />
             <span className="capitalize">{status}</span>
           </Badge>

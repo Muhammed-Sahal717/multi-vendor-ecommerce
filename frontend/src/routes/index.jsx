@@ -19,8 +19,6 @@ import SuperAdminLayout from '../layouts/SuperAdminLayout.jsx';
 import HomePage from '../features/storefront/pages/HomePage.jsx';
 import ProductsPage from '../features/storefront/pages/ProductsPage.jsx';
 import ProductDetailsPage from '../features/storefront/pages/ProductDetailsPage.jsx';
-import CategoriesPage from '../features/storefront/pages/CategoriesPage.jsx';
-import CategoryProductsPage from '../features/storefront/pages/CategoryProductsPage.jsx';
 import CartPage from '../features/cart/pages/CartPage.jsx';
 import CheckoutPage from '../features/checkout/pages/CheckoutPage.jsx';
 import OrderSuccessPage from '../features/checkout/pages/OrderSuccessPage.jsx';
@@ -49,7 +47,6 @@ import SellerEarningsDashboardPage from '../features/seller/pages/EarningsDashbo
 import SellerEarningsHistoryPage from '../features/seller/pages/EarningsHistoryPage.jsx';
 import SellerPayoutHistoryPage from '../features/seller/pages/PayoutHistoryPage.jsx';
 import SellerProfilePage from '../features/seller/pages/SellerProfilePage.jsx';
-import SellerApplicationPage from '../features/seller/pages/SellerApplicationPage.jsx';
 
 // Admin Pages
 import AdminDashboardPage from '../features/admin/pages/DashboardPage.jsx';
@@ -82,9 +79,13 @@ export const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: 'products', element: <ProductsPage /> },
           { path: 'products/:slug', element: <ProductDetailsPage /> },
-          { path: 'categories', element: <CategoriesPage /> },
-          { path: 'categories/:slug', element: <CategoryProductsPage /> },
+          { path: 'categories', element: <Navigate to="/products" replace /> },
+          { path: 'categories/:slug', element: <Navigate to="/products" replace /> },
           { path: 'cart', element: <CartPage /> },
+          {
+            path: 'seller/apply',
+            element: <Navigate to="/customer/profile" replace />,
+          },
           {
             element: <ProtectedRoute />,
             children: [
@@ -146,7 +147,6 @@ export const router = createBrowserRouter([
           { path: 'earnings/history', element: <SellerEarningsHistoryPage /> },
           { path: 'payouts', element: <SellerPayoutHistoryPage /> },
           { path: 'profile', element: <SellerProfilePage /> },
-          { path: 'apply', element: <SellerApplicationPage /> },
         ],
       },
 

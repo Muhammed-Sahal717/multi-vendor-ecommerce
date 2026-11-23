@@ -177,3 +177,26 @@ class ProductFilterTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 18)
+
+    def test_filter_by_parent_category_includes_subcategories(self):
+        clothing = Category.objects.create(name="Clothing")
+        shirts = Category.objects.create(name="Shirts", parent=clothing)
+        jeans = Category.objects.create(name="Jeans", parent=clothing)
+
+        self.create_product("Cotton Shirt", "SHIRT-001", shirts, "500.00")
+        self.create_product("Denim Jeans", "JEANS-001", jeans, "1200.00")
+        self.create_product("Generic Clothes", "CLOTH-001", clothing, "800.00")
+
+        # Filtering by parent "clothing" should return all 3
+        response = self.client.get(self.url, {"category": clothing.slug})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_skus = {item["sku"] for item in response.data["results"]}
+        self.assertIn("SHIRT-001", returned_skus)
+        self.assertIn("JEANS-001", returned_skus)
+        self.assertIn("CLOTH-001", returned_skus)
+
+        # Filtering by subcategory "shirts" should return only the shirt
+        response_sub = self.client.get(self.url, {"category": shirts.slug})
+        self.assertEqual(response_sub.status_code, status.HTTP_200_OK)
+        sub_skus = {item["sku"] for item in response_sub.data["results"]}
+        self.assertEqual(sub_skus, {"SHIRT-001"})

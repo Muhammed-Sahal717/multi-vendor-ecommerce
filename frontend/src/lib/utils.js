@@ -5,7 +5,10 @@ export { cn } from 'cn';
  */
 export const getMediaUrl = (url) => {
   if (!url) return null;
-  if (typeof url !== 'string') return null;
+  if (typeof url === 'object') {
+    url = url.url || url.image || url.file || url.src;
+  }
+  if (!url || typeof url !== 'string') return null;
 
   if (
     url.startsWith('http://') ||
@@ -23,6 +26,31 @@ export const getMediaUrl = (url) => {
   } catch {
     return `http://localhost:8000${url.startsWith('/') ? '' : '/'}${url}`;
   }
+};
+
+/**
+ * Extracts and formats the user/artisan profile avatar URL across various DRF patterns.
+ */
+export const getUserAvatarUrl = (userOrProfile) => {
+  if (!userOrProfile) return null;
+  if (typeof userOrProfile === 'string') return getMediaUrl(userOrProfile);
+  const raw =
+    userOrProfile.profile_image ||
+    userOrProfile.image ||
+    userOrProfile.avatar ||
+    userOrProfile.profile_picture ||
+    userOrProfile.photo ||
+    userOrProfile.picture ||
+    userOrProfile.profile?.profile_image ||
+    userOrProfile.profile?.image ||
+    userOrProfile.profile?.avatar ||
+    userOrProfile.profile?.profile_picture ||
+    userOrProfile.user?.profile_image ||
+    userOrProfile.user?.image ||
+    userOrProfile.user?.avatar ||
+    userOrProfile.user?.profile_picture;
+
+  return getMediaUrl(raw);
 };
 
 /**

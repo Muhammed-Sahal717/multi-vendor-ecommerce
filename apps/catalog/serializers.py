@@ -10,6 +10,8 @@ from apps.audit.services import record_audit_event
 
 class CategorySerializer(serializers.ModelSerializer):
     subcategories = serializers.SerializerMethodField()
+    parent_name = serializers.CharField(source="parent.name", read_only=True, default=None)
+    parent_slug = serializers.CharField(source="parent.slug", read_only=True, default=None)
 
     class Meta:
         model = Category
@@ -18,7 +20,10 @@ class CategorySerializer(serializers.ModelSerializer):
             "name",
             "slug",
             "description",
+            "image",
             "parent",
+            "parent_name",
+            "parent_slug",
             "subcategories",
             "is_active",
             "created_at",
@@ -27,6 +32,8 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "slug",
+            "parent_name",
+            "parent_slug",
             "subcategories",
             "created_at",
             "updated_at",

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -8,7 +8,9 @@ import {
   Loader2,
   CheckCircle2,
   ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
+import { useAuth } from '../../../context/AuthProvider.jsx';
 import { customerService } from '../../customer/services/customerService.js';
 import { ROUTE_PATHS } from '../../../routes/routePaths.js';
 import { Card } from '../../../components/ui/card.jsx';
@@ -19,13 +21,23 @@ import { Textarea } from '../../../components/ui/textarea.jsx';
 
 export const SellerApplicationPage = () => {
   const navigate = useNavigate();
+  const { user, isSeller, isAdmin } = useAuth();
   const [formError, setFormError] = useState('');
+
+  // Existing sellers/admins should be redirected to their respective dashboards
+  useEffect(() => {
+    if (isSeller) {
+      navigate(ROUTE_PATHS.SELLER.DASHBOARD, { replace: true });
+    } else if (isAdmin) {
+      navigate(ROUTE_PATHS.ADMIN.DASHBOARD, { replace: true });
+    }
+  }, [isSeller, isAdmin, navigate]);
 
   const [formData, setFormData] = useState({
     business_name: '',
     business_type: 'Individual Artisan',
-    business_email: '',
-    business_phone: '',
+    business_email: user?.email || '',
+    business_phone: user?.phone_number || user?.mobile || '',
     business_address: '',
     city: '',
     state: '',
@@ -62,32 +74,44 @@ export const SellerApplicationPage = () => {
     applyMutation.mutate(formData);
   };
 
+  const hasPendingAppError = formError.toLowerCase().includes('pending');
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 space-y-6">
       <Link
-        to={ROUTE_PATHS.CUSTOMER.PROFILE}
+        to={ROUTE_PATHS.STOREFRONT.HOME}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors mb-1"
       >
         <ArrowLeft size={13} />
-        <span>Back to Profile</span>
+        <span>Back to Marketplace</span>
       </Link>
 
       <div className="text-center space-y-2">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
           <Store size={26} />
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+        <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl font-heading">
           Apply to Sell on GALLA.
         </h1>
         <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          Join our verified artisan community and start selling your handcrafted creations.
+          Join our verified artisan community and start selling your handcrafted creations with zero listing fees.
         </p>
       </div>
 
       {formError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
-          <AlertCircle size={15} />
-          <span>{formError}</span>
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span className="font-medium">{formError}</span>
+          </div>
+          {hasPendingAppError && (
+            <Button asChild size="sm" variant="outline" className="rounded-xl text-xs h-8 shrink-0 bg-card border-destructive/30 text-destructive hover:bg-destructive/10">
+              <Link to={ROUTE_PATHS.CUSTOMER.SELLER_APPLICATION_STATUS}>
+                <span>Track Status</span>
+                <ArrowRight size={13} className="ml-1" />
+              </Link>
+            </Button>
+          )}
         </div>
       )}
 

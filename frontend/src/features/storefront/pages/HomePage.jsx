@@ -164,7 +164,7 @@ export const HomePage = () => {
               asChild
               className="group h-12 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/30 text-xs sm:text-sm px-7 transition-all cursor-pointer"
             >
-              <Link to={ROUTE_PATHS.SELLER.APPLICATION} className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+              <Link to={ROUTE_PATHS.CUSTOMER.PROFILE} className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
                 <span>Apply to Sell on Galla</span>
                 <ArrowRight size={16} className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
               </Link>

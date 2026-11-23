@@ -17,9 +17,25 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await apiClient.get(API_ENDPOINTS.AUTH.ME);
-      setUser(response.data);
-      return response.data;
+      const [meRes, profileRes] = await Promise.allSettled([
+        apiClient.get(API_ENDPOINTS.AUTH.ME),
+        apiClient.get(API_ENDPOINTS.AUTH.PROFILE),
+      ]);
+      const meData = meRes.status === 'fulfilled' ? meRes.value?.data || {} : {};
+      const profileData = profileRes.status === 'fulfilled' ? profileRes.value?.data || {} : {};
+      const mergedUser = {
+        ...profileData,
+        ...meData,
+        profile_image:
+          profileData?.profile_image ||
+          profileData?.image ||
+          profileData?.avatar ||
+          meData?.profile_image ||
+          meData?.image,
+        profile: profileData,
+      };
+      setUser(mergedUser);
+      return mergedUser;
     } catch {
       return null;
     }
@@ -35,9 +51,25 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        const response = await apiClient.get(API_ENDPOINTS.AUTH.ME);
+        const [meRes, profileRes] = await Promise.allSettled([
+          apiClient.get(API_ENDPOINTS.AUTH.ME),
+          apiClient.get(API_ENDPOINTS.AUTH.PROFILE),
+        ]);
+        const meData = meRes.status === 'fulfilled' ? meRes.value?.data || {} : {};
+        const profileData = profileRes.status === 'fulfilled' ? profileRes.value?.data || {} : {};
         if (isMounted) {
-          setUser(response.data);
+          const mergedUser = {
+            ...profileData,
+            ...meData,
+            profile_image:
+              profileData?.profile_image ||
+              profileData?.image ||
+              profileData?.avatar ||
+              meData?.profile_image ||
+              meData?.image,
+            profile: profileData,
+          };
+          setUser(mergedUser);
         }
       } catch {
         // Token validation or refresh failure handled by axios interceptor
@@ -67,6 +99,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     isInitializing,
     refetchUser: fetchCurrentUser,
+    updateUser: setUser,
+    setUser,
     logout: handleLogout,
   };
 

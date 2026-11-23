@@ -38,6 +38,8 @@ export const SellerPayoutsPage = () => {
   const sellerIdParam = searchParams.get('seller') || '';
   const queryClient = useQueryClient();
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const [selectedSellerId, setSelectedSellerId] = useState(sellerIdParam);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -45,6 +47,7 @@ export const SellerPayoutsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalSellerId, setModalSellerId] = useState('');
   const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutDate, setPayoutDate] = useState(todayStr);
   const [payoutRef, setPayoutRef] = useState('');
   const [payoutNotes, setPayoutNotes] = useState('');
   const [modalError, setModalError] = useState('');
@@ -55,7 +58,23 @@ export const SellerPayoutsPage = () => {
     queryFn: () => adminService.getSellers(),
   });
 
+  // Fetch earnings overview for balance lookups
+  const { data: earningsData } = useQuery({
+    queryKey: queryKeys.admin.earnings(),
+    queryFn: () => adminService.getSellerEarningsOverview(),
+  });
+
   const sellers = Array.isArray(sellersData) ? sellersData : sellersData?.results || [];
+  const earningsList = Array.isArray(earningsData) ? earningsData : earningsData?.results || [];
+
+  // Map of seller_id -> pending balance
+  const balanceMap = earningsList.reduce((acc, item) => {
+    const id = item.seller_id || item.id;
+    if (id) {
+      acc[id] = item.pending_payout_balance || '0.00';
+    }
+    return acc;
+  }, {});
 
   // Default to first seller if none selected
   const activeSellerId = selectedSellerId || (sellers.length > 0 ? sellers[0].id : '');
@@ -82,11 +101,19 @@ export const SellerPayoutsPage = () => {
       resetModal();
     },
     onError: (err) => {
-      const msg =
-        err?.response?.data?.detail ||
-        err?.response?.data?.amount?.[0] ||
-        err?.message ||
-        'Failed to record payout.';
+      const data = err?.response?.data;
+      let msg = 'Failed to record payout.';
+      if (typeof data === 'object' && data !== null) {
+        if (data.detail) {
+          msg = data.detail;
+        } else {
+          const firstKey = Object.keys(data)[0];
+          const val = Array.isArray(data[firstKey]) ? data[firstKey][0] : data[firstKey];
+          msg = `${firstKey}: ${val}`;
+        }
+      } else if (err?.message) {
+        msg = err.message;
+      }
       setModalError(msg);
     },
   });
@@ -94,6 +121,7 @@ export const SellerPayoutsPage = () => {
   const resetModal = () => {
     setModalSellerId('');
     setPayoutAmount('');
+    setPayoutDate(new Date().toISOString().split('T')[0]);
     setPayoutRef('');
     setPayoutNotes('');
     setModalError('');
@@ -115,8 +143,18 @@ export const SellerPayoutsPage = () => {
       setModalError('Please enter a valid payout amount.');
       return;
     }
+    if (!payoutDate) {
+      setModalError('Payout settlement date is required.');
+      return;
+    }
     if (!payoutRef.trim()) {
       setModalError('Transaction reference / UTR is required.');
+      return;
+    }
+
+    const availableBal = Number(balanceMap[modalSellerId] || 0);
+    if (availableBal > 0 && Number(payoutAmount) > availableBal) {
+      setModalError(`Payout amount (₹${payoutAmount}) exceeds available balance (₹${availableBal.toFixed(2)}).`);
       return;
     }
 
@@ -124,6 +162,7 @@ export const SellerPayoutsPage = () => {
       sellerId: modalSellerId,
       payload: {
         amount: payoutAmount,
+        payout_date: payoutDate,
         transaction_reference: payoutRef.trim(),
         notes: payoutNotes.trim(),
       },
@@ -225,10 +264,19 @@ export const SellerPayoutsPage = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="text-right sm:border-r border-border/60 sm:pr-3">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                Pending Balance
+              </span>
+              <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
+                ₹{balanceMap[activeSeller.id] || '0.00'}
+              </span>
+            </div>
+
             <Button asChild variant="outline" size="sm" className="rounded-xl text-xs h-8 cursor-pointer">
               <Link to={ROUTE_PATHS.ADMIN.SELLER_DETAILS(activeSeller.id)}>
-                <span>View Full Store Profile</span>
+                <span>View Store Profile</span>
               </Link>
             </Button>
           </div>
@@ -302,7 +350,9 @@ export const SellerPayoutsPage = () => {
               <div className="text-xs text-muted-foreground flex items-center gap-1.5 self-end sm:self-center">
                 <Calendar size={13} />
                 <span>
-                  {formatDate(payout.created_at)}
+                  {payout.payout_date
+                    ? `Disbursed: ${payout.payout_date}`
+                    : formatDate(payout.created_at)}
                 </span>
               </div>
             </Card>
@@ -325,9 +375,16 @@ export const SellerPayoutsPage = () => {
 
           <form onSubmit={handleSubmitPayout} className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="sellerSelect" className="text-xs font-bold text-foreground">
-                Artisan Seller *
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sellerSelect" className="text-xs font-bold text-foreground">
+                  Artisan Seller *
+                </Label>
+                {modalSellerId && (
+                  <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                    Avail: ₹{balanceMap[modalSellerId] || '0.00'}
+                  </span>
+                )}
+              </div>
               <select
                 id="sellerSelect"
                 value={modalSellerId}
@@ -344,20 +401,36 @@ export const SellerPayoutsPage = () => {
               </select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="payoutAmt" className="text-xs font-bold text-foreground">
-                Disbursement Amount (₹) *
-              </Label>
-              <Input
-                id="payoutAmt"
-                type="number"
-                step="0.01"
-                placeholder="e.g. 24500"
-                value={payoutAmount}
-                onChange={(e) => setPayoutAmount(e.target.value)}
-                className="text-xs rounded-xl bg-background border-border"
-                required
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="payoutAmt" className="text-xs font-bold text-foreground">
+                  Amount (₹) *
+                </Label>
+                <Input
+                  id="payoutAmt"
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 24500"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  className="text-xs rounded-xl bg-background border-border"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="payoutDate" className="text-xs font-bold text-foreground">
+                  Settlement Date *
+                </Label>
+                <Input
+                  id="payoutDate"
+                  type="date"
+                  value={payoutDate}
+                  onChange={(e) => setPayoutDate(e.target.value)}
+                  className="text-xs rounded-xl bg-background border-border"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">

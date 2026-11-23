@@ -1,212 +1,393 @@
-# 1. GALLA — Multi-Vendor E-Commerce Marketplace Backend
+# GALLA. — Full-Stack Multi-Vendor E-Commerce Platform
 
-GALLA is a multi-vendor e-commerce marketplace and order management backend built with Python, Django, and Django REST Framework, tailored for multi-vendor retail operations in Kerala and Indian commercial contexts.
+**GALLA** is a production-grade, multi-vendor e-commerce marketplace and order fulfillment platform engineered with a decoupled full-stack architecture: a **Django REST Framework (DRF)** backend paired with a high-performance **React 19 (Vite & Tailwind CSS)** single-page application.
+
+Designed for scalable multi-vendor retail, GALLA supports isolated vendor catalogs, distributed split-order fulfillment, automated commission and payout ledgers, risk-gated payment pipelines, and an immutable regulatory audit trail.
 
 ---
 
 ## Table of Contents
-1. [Title & High-level Description](#1-galla--multi-vendor-e-commerce-marketplace-backend)
-2. [Architecture Overview](#2-architecture-overview)
-3. [Domain Model Summary](#3-domain-model-summary)
-4. [User Roles & Capabilities](#4-user-roles--capabilities)
-5. [Authentication & Authorization](#5-authentication--authorization)
-6. [Key End-to-End Workflows](#6-key-end-to-end-workflows)
-7. [Directory Structure](#7-directory-structure)
-8. [Tech Stack & Dependencies](#8-tech-stack--dependencies)
-9. [Environment Configuration](#9-environment-configuration)
-10. [Quick Start & Local Setup](#10-quick-start--local-setup)
-11. [Database Migrations](#11-database-migrations)
-12. [Running Tests](#12-running-tests)
-13. [API Route Index](#13-api-route-index)
-14. [Accounts Module Reference](#14-accounts-module-reference)
-15. [Sellers Module Reference](#15-sellers-module-reference)
-16. [Catalog Module Reference](#16-catalog-module-reference)
-17. [Cart Module Reference](#17-cart-module-reference)
-18. [Orders Module Reference](#18-orders-module-reference)
-19. [Payments Module Reference](#19-payments-module-reference)
-20. [Audit Module Reference](#20-audit-module-reference)
-21. [Common Module Reference](#21-common-module-reference)
-22. [Admin Dashboard & Operations](#22-admin-dashboard--operations)
-23. [Code Quality & Standards](#23-code-quality--standards)
-24. [Known Limitations & MVP Scope Boundaries](#24-known-limitations--mvp-scope-boundaries)
-25. [Links to Module Documentation](#25-links-to-module-documentation)
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [Tech Stack & Tooling](#2-tech-stack--tooling)
+3. [User Portals & Features](#3-user-portals--features)
+4. [Important Engineering Decisions](#4-important-engineering-decisions)
+5. [Directory Structure](#5-directory-structure)
+6. [API Route Index](#6-api-route-index)
+7. [Environment Configuration](#7-environment-configuration)
+8. [Quick Start & Local Setup](#8-quick-start--local-setup)
+9. [Running Tests & Quality Assurance](#9-running-tests--quality-assurance)
+10. [Audit & Financial Ledger Specifications](#10-audit--financial-ledger-specifications)
+11. [Module Documentation References](#11-module-documentation-references)
 
 ---
 
-## 2. Architecture Overview
-GALLA follows a modular Django application architecture with a clean separation of concerns:
-- **Presentation Layer**: Django REST Framework APIViews, Generics, and Mixins providing JSON REST interfaces.
-- **Service Layer**: Dedicated service modules (`services.py`) encapsulating complex domain workflows, atomic transactions, row-level locks, and side-effect orchestration.
-- **Data Access Layer**: Django ORM models with strict constraints (UUID primary keys, conditional unique constraints, protected foreign keys, and custom querysets). Note that UUIDs provide non-sequential identifiers; access control and object isolation are enforced by permissions and query scoping.
-- **Security & Telemetry**: Model-level audit logging layer capturing state transitions with automatic sensitive data filtering.
+## 1. Architecture Overview
+
+GALLA enforces a clean separation of concerns between client presentations, API orchestration, domain business services, and persistent relational data:
 
 ```mermaid
 graph TD
-    Client[Web & Mobile Clients] --> Gateway[Django REST Framework Gateway]
-    Gateway --> Auth[SimpleJWT Authentication]
-    Auth --> Routing[Modular App Routers]
-    Routing --> Accounts[apps.accounts]
-    Routing --> Sellers[apps.sellers]
-    Routing --> Catalog[apps.catalog]
-    Routing --> Cart[apps.cart]
-    Routing --> Orders[apps.orders]
-    Routing --> Payments[apps.payments]
-    Routing --> Admin[apps.common & apps.audit]
+    subgraph Frontend ["Frontend Clients (React 19 / Vite / Tailwind CSS)"]
+        Storefront["Customer Storefront & Catalog"]
+        CustPortal["Customer Portal (Orders, Addresses, Profile)"]
+        SellerPortal["Seller Workspace (Catalog, Fulfillment, Earnings)"]
+        AdminPortal["Platform Admin & Super Admin Governance"]
+    end
 
-    Orders -->|Atomic Stock Lock| Catalog
-    Orders -->|Payment Initialization| Payments
-    Orders -->|Earning Recognition| Sellers
-    Orders -->|Audit Logging| Audit[apps.audit]
-    Payments -->|COD Release| Sellers
+    subgraph Gateway ["API Gateway & Security Layer"]
+        CORS["CORS & CSRF Middleware"]
+        AuthMiddleware["SimpleJWT Token Verification & Rotation"]
+        RBAC["Role-Based Access Control (Customer, Seller, Admin, Superadmin)"]
+    end
+
+    subgraph ServiceLayer ["Django REST Service Layer (apps.*)"]
+        AccountsSvc["apps.accounts (Auth, Profiles, Address Book)"]
+        CatalogSvc["apps.catalog (Hierarchical Taxonomy, Moderation, Images)"]
+        CartSvc["apps.cart (Server-side Session & Stock Guard)"]
+        OrdersSvc["apps.orders (Atomic Concurrency, Split Fulfillment)"]
+        PaymentsSvc["apps.payments (Razorpay Gateway Mock, COD Risk Rules)"]
+        SellersSvc["apps.sellers (Commission Ledger, Payout Engine)"]
+        AuditSvc["apps.audit (Append-Only Immutable Event Stream)"]
+        AdminSvc["apps.common (Analytics Aggregations & System Seeding)"]
+    end
+
+    subgraph Storage ["Database & File System"]
+        Postgres[(PostgreSQL Database - ACID Row Locks)]
+        MediaStorage[("Media Storage (Product & Category Assets)")]
+    end
+
+    Frontend -->|HTTPS / JSON + JWT| Gateway
+    Gateway --> ServiceLayer
+    OrdersSvc -->|select_for_update Row Locks| CatalogSvc
+    OrdersSvc -->|Trigger Initial Payment| PaymentsSvc
+    OrdersSvc -->|Recognize 5% Commission on Delivery| SellersSvc
+    ServiceLayer -->|Audit Events| AuditSvc
+    ServiceLayer --> Postgres
+    CatalogSvc --> MediaStorage
+    AccountsSvc --> MediaStorage
 ```
 
----
+### Key Architectural Layers:
 
-## 3. Domain Model Summary
-- **User** (`accounts.User`): UUID-based custom user model authenticated via email. Supports roles `customer`, `seller`, `admin`, `superadmin`.
-- **CustomerProfile** (`accounts.CustomerProfile`): 1:1 with customer user; stores phone number and avatar.
-- **Address** (`accounts.Address`): Shipping address book with conditional unique constraint for default address per user.
-- **SellerApplication** (`sellers.SellerApplication`): Vendor application records submitted by customers, reviewed by admins.
-- **SellerProfile** (`sellers.SellerProfile`): Active/suspended vendor store identity created upon application approval.
-- **SellerEarning** (`sellers.SellerEarning`): 1:1 with delivered `OrderItem`; holds gross subtotal, fixed 5% commission, and net earning.
-- **SellerPayout** (`sellers.SellerPayout`): Completed manual bank payout ledger entries with unique transaction reference.
-- **Category** (`catalog.Category`): Self-referencing hierarchical category tree with unique slugs and protected deletion.
-- **Product** (`catalog.Product`): Seller-owned catalog items with SKU (unique per seller), price, stock, and moderation state (`pending`, `approved`, `rejected`).
-- **ProductImage** (`catalog.ProductImage`): Gallery images with conditional unique constraint guaranteeing at most one primary image per product.
-- **Cart & CartItem** (`cart.Cart`, `cart.CartItem`): Server-side shopping cart with unique product-per-cart constraint.
-- **Order & OrderItem** (`orders.Order`, `orders.OrderItem`): Master customer order and itemized seller-specific order items with immutable address and price snapshots.
-- **Payment & PaymentAttempt** (`payments.Payment`, `payments.PaymentAttempt`): Order payment tracking with multi-attempt ledger. Statuses: `pending`, `successful`, `failed`, `refunded`, `cancelled`.
-- **AuditEvent** (`audit.AuditEvent`): Application-level append-only event stream tracking actor, entity, action (21 choices), metadata, and client IP/agent. Protected against modification and deletion by model instance methods (`save()` and `delete()`), with QuerySet bulk operations (`.update()`, `.delete()`) and direct raw SQL bypassing model hooks.
+1. **Frontend Presentation**: Single Page Application (SPA) built on React 19, Vite, and Tailwind CSS. Employs TanStack Query v5 for server-state caching, optimistic updates, and declarative cache invalidation.
+2. **API & Authentication Gateway**: DRF JSON endpoints authenticated via `djangorestframework_simplejwt`. Features automatic token refreshing, sliding sessions, and granular permission classes.
+3. **Domain Service Layer**: Pure Python domain services (`services.py`) encapsulating database transactions, row-level locking, financial calculations (`ROUND_HALF_UP`), and side-effect telemetry.
+4. **Data Access & Storage**: PostgreSQL relational database with UUID primary keys, check constraints, conditional unique indexes, and foreign key protections (`PROTECT`).
 
 ---
 
-## 4. User Roles & Capabilities
-| Role | Capabilities | Restrictions |
-| :--- | :--- | :--- |
-| **Customer** | Register, login, manage profile & addresses, browse catalog, manage cart, place orders, cancel pending items, simulate mock online payments | Cannot access seller, admin, or superadmin endpoints |
-| **Seller** | Submit seller application, manage store profile, create products & upload images, manage own order items, view earnings & payouts | Cannot approve own products, access other sellers' orders, or record payouts |
-| **Admin** | Passes `IsPlatformAdmin` to review seller applications, moderate products, update seller/customer statuses, confirm COD collections, record payouts, inspect platform orders/payments, and view the analytics dashboard (`GET /api/admin/dashboard/`) | Cannot access the audit event query endpoint (`GET /api/audit/`) |
-| **Superadmin** | Holds role `superadmin`. Has all `IsPlatformAdmin` permissions plus exclusive access to the audit event query API (`IsSuperAdmin` on `GET /api/audit/`). When staff/superuser flags are enabled, accesses Django Admin (`/admin/`) to manage registered models (`User`, `Group`, `Category`, `Product`, `ProductImage`, `Payment`, `PaymentAttempt`, `AuditEvent`) | Scoped to registered models, views, and defined API endpoints; does not provide arbitrary operational bypass outside configured views and models |
+## 2. Tech Stack & Tooling
+
+### Backend
+
+- **Framework**: Python 3.12, Django 5.x / 6.x, Django REST Framework (DRF)
+- **Authentication**: `djangorestframework-simplejwt` (HMAC-SHA256 JWTs with token rotation)
+- **Database**: PostgreSQL with transactional isolation (`@transaction.atomic`, `select_for_update()`)
+- **Image Processing**: `Pillow` (multi-image product galleries, category icons, customer avatars)
+- **Filtering & Search**: `django-filter` (hierarchical recursive category filters, price bounds, sorting)
+- **CORS & Security**: `django-cors-headers`, secure HTTP headers, media root protection
+
+### Frontend
+
+- **Framework & Runtime**: React 19, Vite 8, Node.js
+- **Styling & Layout**: Tailwind CSS 4, Base UI primitives, Lucide React icons
+- **State & Server Synchronization**: TanStack React Query v5 (stale-while-revalidate, optimistic mutations, window-focus re-fetching)
+- **Client Routing**: React Router v7 with declarative route guards (`ProtectedRoute`, `RoleRoute`)
+- **HTTP Client**: Axios with automatic JWT bearer injection and interceptor-based 401 token refresh retry queue
+- **State Store**: Zustand (lightweight auth session and token persistence)
 
 ---
 
-## 5. Authentication & Authorization
-- **Token Mechanism**: JSON Web Tokens via `djangorestframework_simplejwt`.
-- **Token Lifetimes** (configured in `config/settings/base.py`):
-  * Access Token: **30 minutes**
-  * Refresh Token: **7 days**
-- **Header**: `Authorization: Bearer <access_token>`.
-- **Key Custom Permissions**:
-  - `IsPlatformAdmin`: Ensures user is authenticated and has role `admin` or `superadmin`.
-  - `IsActiveSeller`: Ensures user is authenticated, has role `seller`, and holds an active `SellerProfile`.
-  - `IsCustomer`: Ensures user is authenticated and has role `customer`.
-  - `IsSuperAdmin`: Ensures user is authenticated and has role `superadmin`.
+## 3. User Portals & Features
+
+The platform is divided into four dedicated, role-guarded portal ecosystems:
+
+### A. Customer Storefront & Portal
+
+- **Catalog Browsing**: Real-time keyword search, price range filtering, sort by price/newest, and department taxonomy.
+- **Hierarchical Categories**: Interactive primary category carousel with dynamic image/icon rendering, plus secondary subcategory pills (`Clothing > Shirts`, `Home & Kitchen > Cookware`).
+- **Product Details Showcase**: Multi-thumbnail interactive image gallery, stock indicators, artisan credentials, 7-day guarantee details, and **Dynamic Recommended Products**.
+- **Shopping Cart**: Real-time server-synced cart with item-level quantity increments, out-of-stock validation, and subtotal recalculation.
+- **Multi-Step Checkout**:
+  - Saved shipping address selector with instant address addition.
+  - Risk-gated payment selection: **Cash on Delivery (COD)** vs. **Razorpay Online Payment**.
+- **Razorpay Simulator Modal**: Authentic gateway simulation styled with 256-bit encryption badges, lock indicators, and atomic status transitions. Closing the modal preserves the order in a safe `pending` state with instant completion recovery.
+- **Customer Dashboard**: Live order tracking with itemized status badges, delivery snapshots, one-click item cancellations with automatic stock restocking, and saved address book management.
+
+### B. Multi-Vendor Seller Workspace
+
+- **Vendor Onboarding**: Customers can submit merchant applications with business credentials, tax details, and store descriptions for admin review.
+- **Seller Executive Dashboard**: Metric KPI cards tracking gross merchandise volume (GMV), net earnings, active listings, and incoming order counts.
+- **Product Management Workbench**: Create, update, and manage product listings. Multi-image gallery uploader with primary thumbnail selection. Products undergo moderation (`under_review` $\to$ `approved`).
+- **Split-Order Fulfillment**: Sellers only see and fulfill items from orders belonging to their store. Independent status workflow: `confirmed` $\to$ `processing` $\to$ `shipped` $\to$ `delivered`.
+- **Financial Earnings Ledger**: Detailed itemized record of delivered items showing gross price, platform fee (5% commission), and net payout accrual.
+- **Payout History**: Complete log of bank disbursements with transaction references and payout dates.
+
+### C. Platform Administration Portal
+
+- **Executive Analytics Dashboard**: Platform-wide metrics including Total GMV, Net Platform Commission Retained, Total Orders, Active Merchants, and Customer count.
+- **Seller Application Moderation**: Approve or reject vendor applications with custom administrative feedback.
+- **Catalog Quality Control**: Product review queue to inspect, approve, or reject seller product submissions prior to storefront listing.
+- **Category Taxonomy Manager**:
+  - Create and edit parent and child subcategories.
+  - Upload custom category images/icons (PNG, SVG, WebP, JPG) with real-time previews.
+  - Dynamic nesting dropdown with cycle prevention.
+- **Platform Orders & Fulfillment Inspection**: Full visibility into multi-vendor split orders with vendor-item breakdowns.
+- **Payments & COD Reconciliation**: Transaction ledger for online payments and physical cash collection confirmation for COD deliveries.
+- **Seller Payout Generation**: Issue payouts to verified sellers with balance validation and reference tracking.
+
+### D. Super Admin Governance
+
+- **Immutable Audit Trail (`/admin/audit-logs`)**: Real-time visual inspector for all critical platform events (logins, order creations, cancellations, status transitions, product reviews, payouts).
+- **Actor & IP Traceability**: Tracks user identity, role, client IP address, user-agent, and exact before/after state diffs.
 
 ---
 
-## 6. Key End-to-End Workflows
+## 4. Important Engineering Decisions
 
-### 6.1 Customer Shopping & Checkout
-1. Customer registers via `POST /api/auth/register/` and logs in via `POST /api/auth/login/`.
-2. Customer browses approved products via `GET /api/catalog/products/`.
-3. Customer adds products to cart via `POST /api/cart/items/`.
-4. Customer executes checkout via `POST /api/orders/checkout/` specifying shipping address and payment method (`cod` or `razorpay`). Stock is locked with `select_for_update()` and deducted atomically.
-5. If `razorpay`, customer pays via mock endpoint `POST /api/payments/<payment_id>/mock-process/`.
+### 1. Concurrency Control & Row-Level Locking
 
-### 6.2 Seller Onboarding & Product Catalog
-1. Customer submits vendor application via `POST /api/sellers/applications/`.
-2. Platform Admin reviews application via `PATCH /api/sellers/admin/applications/<id>/review/`.
-3. On approval, user role transitions to `SELLER`, and `SellerProfile` is created.
-4. Seller submits a new product via `POST /api/catalog/seller/products/`. Product status is initially `PENDING`.
-5. Seller uploads gallery photos via `POST /api/catalog/seller/products/<slug>/images/`.
-6. Admin approves product via `PATCH /api/catalog/admin/products/<slug>/review/`. Product becomes publicly visible.
+- **Problem**: In high-traffic sales, concurrent checkouts for low-stock inventory can cause overselling and negative inventory.
+- **Decision**: In `apps.orders.services.create_order`, product rows are sorted by ID and locked inside an ACID transaction using `select_for_update()`.
+- **Result**: Inventory validation and decrement operations are serialized per product, preventing race conditions, deadlocks, and phantom reads.
 
-### 6.3 Order Fulfillment & Multi-Seller Splitting
-1. Customer places order containing items from multiple sellers.
-2. Order splits into discrete `OrderItem` records tagged with each respective seller profile.
-3. Sellers fulfill items independently through status progression:
-   `PENDING` $\to$ `CONFIRMED` $\to$ `PROCESSING` $\to$ `SHIPPED` $\to$ `DELIVERED`.
-4. Online payment gate ensures sellers cannot advance items beyond `PENDING` unless online payment is `SUCCESSFUL`.
-5. Parent order status automatically reaggregates (`PARTIALLY_SHIPPED`, `DELIVERED`, etc.).
+### 2. Distributed Split-Order Fulfillment Architecture
 
-### 6.4 Payment Processing: Online Mock vs. COD
-- **Online (Razorpay)**: Customer triggers mock processing via `POST /api/payments/<id>/mock-process/`, creating a `PaymentAttempt`. Once marked `SUCCESSFUL`, seller fulfillment is unlocked. Upon item reaching `DELIVERED`, seller earnings are recognized immediately.
-- **Cash on Delivery (COD)**: Sellers can fulfill and deliver immediately. Earnings are recognized once Platform Admin confirms physical collection via `POST /api/payments/admin/<id>/confirm-cod/`. Note that COD confirmation updates payment state directly and does not create a `PaymentAttempt`.
+- **Problem**: In a multi-vendor marketplace, a single customer order may contain products from multiple independent sellers with distinct warehouses and delivery timelines.
+- **Decision**: A master `Order` decomposes into multiple `OrderItem` records, each assigned to a specific `seller`.
+- **Result**: Sellers can only inspect and transition their own items (`confirmed` $\to$ `processing` $\to$ `shipped` $\to$ `delivered`). The parent `Order.status` is computed dynamically via an aggregation service (e.g. if one item is `shipped` and another `processing`, the parent order transitions to `partially_shipped`; when all items reach `delivered`, the master order transitions to `delivered`).
 
-### 6.5 Seller Earnings & Payouts
-1. 5% commission (`COMMISSION_RATE = Decimal("0.0500")`) is calculated on the individual delivered product subtotal (`order_item.subtotal`), excluding delivery charges and taxes, rounded to 2 decimal places using `ROUND_HALF_UP`.
-2. Earning record (`SellerEarning`) is created with a strict 1:1 relationship to the delivered order item.
-3. Available balance is calculated: `Total Net Earnings - Total Recorded Payouts`.
-4. Platform Admin executes bank transfer offline and records the payout via `POST /api/sellers/admin/sellers/<id>/payouts/` with row locking and duplicate reference protection.
+### 3. Dual-Enforced Risk-Gated Payment Policy (COD vs. Online)
+
+- **Problem**: Cash on Delivery for high-value orders carries high logistics risk, return-to-origin (RTO) expenses, and courier fraud.
+- **Decision**: Enforced strict threshold rule:
+  - **Orders $\le$ ₹1,500**: Eligible for either Cash on Delivery (COD) or Online Payment (Razorpay).
+  - **Orders $>$ ₹1,500**: Cash on Delivery is strictly forbidden; Online Payment (Razorpay) is required.
+- **Defense in Depth**:
+  - _Frontend_: `PaymentMethodSelector.jsx` disables the COD selector, displays an advisory banner, and automatically selects Razorpay.
+  - _Backend_: `apps.orders.services.create_order` validates `total_amount > MAX_COD_ORDER_AMOUNT (Decimal("1500.00"))` and raises a `ValidationError` if COD is attempted.
+
+### 4. Cartesian-Safe Financial Aggregations
+
+- **Problem**: Joining multiple one-to-many relationships (e.g., `SellerProfile` $\to$ `SellerEarning` and `SellerProfile` $\to$ `SellerPayout`) in a single SQL query produces a Cartesian product, multiplying financial sums by the number of matching records in the joined table.
+- **Decision**: In `apps.sellers.services.get_admin_seller_earnings_queryset`, independent subqueries are used with `OuterRef("pk")` and `Coalesce`:
+  ```python
+  earnings_subquery = SellerEarning.objects.filter(seller=OuterRef("pk")).values("seller").annotate(total=Sum("net_amount")).values("total")
+  payouts_subquery = SellerPayout.objects.filter(seller=OuterRef("pk")).values("seller").annotate(total=Sum("amount")).values("total")
+  ```
+- **Result**: Aggregate calculations for gross sales, platform fees, net earnings, and available balances remain mathematically precise with zero Cartesian row multiplication.
+
+### 5. Resilient Payment Gateway Simulation
+
+- **Problem**: In test environments, closing a payment modal or navigating away often results in undefined states or accidental order placement.
+- **Decision**:
+  - Orders placed with online payment remain in `Payment.Status.PENDING`.
+  - Closing the `RazorpaySimulatorModal` keeps the user on `/checkout`, provides a persistent recovery banner, and preserves the pending order.
+  - Sellers are blocked from fulfilling items until payment status is confirmed `SUCCESSFUL`.
+
+### 6. Dynamic Recursive Taxonomy & Asset Fallbacks
+
+- **Problem**: Hardcoding category icons in frontend components prevents new categories from displaying appropriate icons.
+- **Decision**:
+  - Added `image` field to `Category` model with admin upload support.
+  - `ProductFilter` in `apps.catalog.filters` recursively resolves all descendant subcategories when filtering by a parent category slug.
+  - `CategoryCard.jsx` on the frontend uses uploaded images with `object-contain` scaling, fail-safe `onError` listeners, and semantic vector fallbacks (including `Trophy` for Sports/Fitness).
+
+### 7. Append-Only Model-Level Audit Immutability
+
+- **Problem**: Privileged administrative accounts or compromised services could alter or delete audit history to conceal unauthorized operations.
+- **Decision**: Overrode `save()` and `delete()` methods on `AuditEvent` model:
+
+  ```python
+  def save(self, *args, **kwargs):
+      if self.pk:
+          raise ValidationError("Audit events are immutable and cannot be updated.")
+      super().save(*args, **kwargs)
+
+  def delete(self, *args, **kwargs):
+      raise ValidationError("Audit events cannot be deleted.")
+  ```
+
+- **Result**: Guarantees an immutable, tamper-evident audit trail for regulatory compliance.
 
 ---
 
-## 7. Directory Structure
+## 5. Directory Structure
+
 ```
-GALLA/
-├── apps/
-│   ├── accounts/          # User identity, JWT auth, profiles, addresses, doc.txt
-│   ├── audit/             # Immutable audit event telemetry & service, doc.txt
-│   ├── cart/              # Persistent user carts and cart items, doc.txt
-│   ├── catalog/           # Categories, products, images, and public views, doc.txt
-│   ├── common/            # RBAC permissions, admin dashboard stats, doc.txt
-│   ├── orders/            # Checkout, order items, fulfillment, cancellation, doc.txt
-│   ├── payments/          # Payment tracking, mock gateway, COD confirmation, doc.txt
-│   └── sellers/           # Onboarding, profiles, earnings, and payouts, doc.txt
-├── config/
+GALLA./
+├── apps/                        # Modular Django backend applications
+│   ├── accounts/                # Custom User, CustomerProfile, Address, JWT Auth
+│   ├── audit/                   # Append-only AuditEvent engine and telemetry
+│   ├── cart/                    # Server-side Cart & CartItem management
+│   ├── catalog/                 # Category (nested), Product, ProductImage, moderation
+│   ├── common/                  # RBAC permissions, Admin dashboard analytics, Seeder
+│   ├── orders/                  # Concurrency checkout, Split Order & OrderItem engine
+│   ├── payments/                # Razorpay simulation, PaymentAttempt ledger, COD confirm
+│   └── sellers/                 # SellerProfile, Applications, Commission & Payout ledger
+├── config/                      # Project settings & URL routing
 │   ├── settings/
-│   │   ├── base.py        # Core Django settings & third-party configs
-│   │   ├── development.py # Local development settings
-│   │   └── production.py  # Production configuration template
+│   │   ├── base.py              # Core shared settings, JWT lifetimes, apps, middleware
+│   │   ├── development.py       # Local development settings & CORS
+│   │   └── production.py        # Production security, static assets, database pooling
 │   ├── asgi.py
-│   ├── urls.py            # Global routing index
+│   ├── urls.py                  # Root URL routing table
 │   └── wsgi.py
-├── media/                 # Uploaded media (profile pictures, product images)
-├── manage.py              # Django CLI utility
-├── MVP_AUDIT.md           # Comprehensive technical audit report
-├── README.md              # Project documentation index
-└── requirements.txt       # Exact pinned dependencies
+├── frontend/                    # Modern React 19 + Vite frontend application
+│   ├── public/                  # Public assets & favicons
+│   ├── src/
+│   │   ├── components/          # Reusable UI primitives (Dialog, Button, Badge, Navbar)
+│   │   ├── context/             # React Context providers (AuthProvider, ThemeProvider)
+│   │   ├── features/            # Domain-driven feature modules
+│   │   │   ├── admin/           # Platform metrics, seller moderation, taxonomy, payouts
+│   │   │   ├── audit/           # Super Admin audit log visualizer & diff viewer
+│   │   │   ├── auth/            # Login, Registration, JWT storage, role verification
+│   │   │   ├── cart/            # Interactive shopping cart drawer and page
+│   │   │   ├── checkout/        # Address book, Payment selector, Razorpay modal
+│   │   │   ├── customer/        # Customer orders, cancellations, profile, address book
+│   │   │   ├── seller/          # Seller portal, product CRUD, fulfillment, earnings
+│   │   │   └── storefront/      # Catalog, filters, product details, recommendations
+│   │   ├── layouts/             # Root, Storefront, Auth, Customer, Seller, Admin layouts
+│   │   ├── lib/                 # Axios client, QueryClient, constants, utilities
+│   │   ├── routes/              # Declarative React Router setup with RoleRoute guards
+│   │   └── stores/              # Zustand global client stores
+│   ├── package.json
+│   └── vite.config.js
+├── manage.py
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-## 8. Tech Stack & Dependencies
-- **Runtime**: Python 3.14.10
-- **Web Framework**: Django 6.1.3
-- **API Framework**: Django REST Framework 3.18.3
-- **Authentication**: djangorestframework-simplejwt 5.5.1 / PyJWT 2.15.1
-- **Database Driver**: psycopg 3.3.8 / psycopg-binary 3.3.8 (PostgreSQL)
-- **Image Processing**: Pillow 13.0.0
-- **Filtering & CORS**: django-filter 26.2, django-cors-headers 4.9.0
-- **Environment**: python-dotenv 1.2.4
+## 6. API Route Index
+
+### Authentication & Accounts (`/api/auth/` & `/api/accounts/`)
+
+| Method            | Path                                         | Access        | Description                            |
+| :---------------- | :------------------------------------------- | :------------ | :------------------------------------- |
+| `POST`            | `/api/auth/register/`                        | Public        | Register customer account              |
+| `POST`            | `/api/auth/login/`                           | Public        | Obtain JWT `access` & `refresh` tokens |
+| `POST`            | `/api/auth/token/refresh/`                   | Public        | Refresh expired access token           |
+| `GET`             | `/api/auth/me/`                              | Authenticated | Retrieve current user profile and role |
+| `GET`/`PUT`       | `/api/accounts/profile/`                     | Authenticated | Read/update profile details            |
+| `POST`            | `/api/accounts/profile/image/`               | Authenticated | Upload customer avatar image           |
+| `GET`/`POST`      | `/api/accounts/addresses/`                   | Customer      | List or create shipping addresses      |
+| `GET`/`PUT`/`DEL` | `/api/accounts/addresses/<id>/`              | Customer      | Manage specific delivery address       |
+| `GET`             | `/api/accounts/admin/customers/`             | Admin         | List all registered customers          |
+| `PATCH`           | `/api/accounts/admin/customers/<id>/status/` | Admin         | Activate/deactivate customer account   |
+
+### Catalog & Taxonomy (`/api/catalog/`)
+
+| Method            | Path                                          | Access         | Description                                                                    |
+| :---------------- | :-------------------------------------------- | :------------- | :----------------------------------------------------------------------------- |
+| `GET`             | `/api/catalog/categories/`                    | Public         | List root categories with nested subcategories (pass `?flat=true` for all)     |
+| `POST`            | `/api/catalog/categories/`                    | Admin          | Create category with optional parent and image upload                          |
+| `GET`/`PUT`/`DEL` | `/api/catalog/categories/<slug>/`             | Public / Admin | Retrieve, update (with image), or delete category                              |
+| `GET`             | `/api/catalog/products/`                      | Public         | List approved products (supports recursive `category`, `search`, price bounds) |
+| `GET`             | `/api/catalog/products/<slug>/`               | Public         | View product details with images and seller info                               |
+| `GET`/`POST`      | `/api/catalog/seller/products/`               | Seller         | List seller listings or create product for review                              |
+| `GET`/`PUT`/`DEL` | `/api/catalog/seller/products/<slug>/`        | Seller         | Manage seller product listing                                                  |
+| `POST`/`DEL`      | `/api/catalog/seller/products/<slug>/images/` | Seller         | Upload or delete product gallery images                                        |
+| `GET`             | `/api/catalog/admin/products/`                | Admin          | List all products across moderation states                                     |
+| `POST`            | `/api/catalog/admin/products/<slug>/review/`  | Admin          | Approve or reject product submission                                           |
+
+### Shopping Cart (`/api/cart/`)
+
+| Method        | Path                    | Access   | Description                                |
+| :------------ | :---------------------- | :------- | :----------------------------------------- |
+| `GET`         | `/api/cart/`            | Customer | Retrieve active cart with stock validation |
+| `POST`        | `/api/cart/items/`      | Customer | Add product to cart with inventory check   |
+| `PATCH`/`DEL` | `/api/cart/items/<id>/` | Customer | Update quantity or remove cart item        |
+
+### Orders & Split Fulfillment (`/api/orders/`)
+
+| Method  | Path                                             | Access   | Description                                                                               |
+| :------ | :----------------------------------------------- | :------- | :---------------------------------------------------------------------------------------- |
+| `POST`  | `/api/orders/checkout/`                          | Customer | Atomic checkout with `select_for_update` and COD $\le$ ₹1,500 check                       |
+| `GET`   | `/api/orders/`                                   | Customer | List customer order history                                                               |
+| `GET`   | `/api/orders/<id>/`                              | Customer | Order details with itemized seller statuses                                               |
+| `POST`  | `/api/orders/<order_id>/items/<item_id>/cancel/` | Customer | Cancel pending item and restore inventory                                                 |
+| `GET`   | `/api/orders/seller/`                            | Seller   | List incoming order items for authenticated seller                                        |
+| `GET`   | `/api/orders/seller/<id>/`                       | Seller   | View seller fulfillment details                                                           |
+| `PATCH` | `/api/orders/seller/<id>/status/`                | Seller   | Transition item status (`confirmed` $\to$ `processing` $\to$ `shipped` $\to$ `delivered`) |
+| `GET`   | `/api/orders/admin/`                             | Admin    | List all platform orders                                                                  |
+| `GET`   | `/api/orders/admin/<id>/`                        | Admin    | Deep inspection of split order items                                                      |
+
+### Payments & Financial Transactions (`/api/payments/`)
+
+| Method | Path                                    | Access   | Description                                              |
+| :----- | :-------------------------------------- | :------- | :------------------------------------------------------- |
+| `GET`  | `/api/payments/`                        | Customer | List customer payments                                   |
+| `GET`  | `/api/payments/<id>/`                   | Customer | Payment record with attempt details                      |
+| `POST` | `/api/payments/<id>/mock-process/`      | Customer | Simulate gateway authorization (`successful` / `failed`) |
+| `GET`  | `/api/payments/admin/`                  | Admin    | List all platform payments                               |
+| `POST` | `/api/payments/admin/<id>/confirm-cod/` | Admin    | Confirm cash collection for COD order                    |
+
+### Sellers, Commissions & Payouts (`/api/sellers/`)
+
+| Method      | Path                                           | Access   | Description                                               |
+| :---------- | :--------------------------------------------- | :------- | :-------------------------------------------------------- |
+| `POST`      | `/api/sellers/applications/`                   | Customer | Submit merchant onboarding application                    |
+| `GET`       | `/api/sellers/admin/applications/`             | Admin    | List seller onboarding applications                       |
+| `POST`      | `/api/sellers/admin/applications/<id>/review/` | Admin    | Approve or reject merchant application                    |
+| `GET`/`PUT` | `/api/sellers/profile/`                        | Seller   | View/update vendor profile and bank info                  |
+| `GET`       | `/api/sellers/earnings/dashboard/`             | Seller   | Seller KPI summary: gross sales, commission, net earnings |
+| `GET`       | `/api/sellers/earnings/`                       | Seller   | Itemized earnings ledger from delivered items             |
+| `GET`       | `/api/sellers/payouts/`                        | Seller   | History of disbursed payouts                              |
+| `GET`       | `/api/sellers/admin/earnings/`                 | Admin    | Platform-wide seller balances (Cartesian-safe)            |
+| `POST`      | `/api/sellers/admin/sellers/<id>/payouts/`     | Admin    | Record verified seller payout against available balance   |
+
+### Audit & Operations (`/api/audit/` & `/api/admin/`)
+
+| Method | Path                    | Access     | Description                                               |
+| :----- | :---------------------- | :--------- | :-------------------------------------------------------- |
+| `GET`  | `/api/audit/`           | Superadmin | Read-only access to immutable audit log stream            |
+| `GET`  | `/api/admin/dashboard/` | Admin      | Platform executive dashboard metrics (GMV, orders, users) |
 
 ---
 
-## 9. Environment Configuration
-Create a `.env` file in the root directory:
+## 7. Environment Configuration
+
+### Backend Configuration (`.env` in root)
+
 ```env
 DEBUG=True
-SECRET_KEY=django-insecure-change-this-in-production-key-for-galla-platform
-ALLOWED_HOSTS=localhost,127.0.0.1,::1
+SECRET_KEY=your-secure-django-secret-key-here
+ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database Configuration (PostgreSQL)
 DB_NAME=galla_db
-DB_USER=sahal
-DB_PASSWORD=
+DB_USER=galla_user
+DB_PASSWORD=galla_password
 DB_HOST=localhost
 DB_PORT=5432
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+### Frontend Configuration (`frontend/.env`)
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
 ---
 
-## 10. Quick Start & Local Setup
-1. **Clone repository and create virtual environment**:
+## 8. Quick Start & Local Setup
+
+### Prerequisites
+
+- Python 3.12+
+- Node.js 20+ and npm
+- PostgreSQL 15+
+
+### Backend Setup
+
+1. **Create and activate a virtual environment**:
    ```bash
-   git clone <repo_url> GALLA
-   cd GALLA
    python3 -m venv .venv
    source .venv/bin/activate
    ```
@@ -214,231 +395,102 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
    ```bash
    pip install -r requirements.txt
    ```
-3. **Configure PostgreSQL database**:
-   ```bash
-   createdb galla_db
-   ```
-4. **Apply migrations**:
+3. **Execute database migrations**:
    ```bash
    python manage.py migrate
    ```
-5. **Create superuser (or use demo seed)**:
+4. **Seed demo data (Categories, Products, Users, Orders, Payouts)**:
    ```bash
-   python manage.py createsuperuser
-   ```
-6. **Seed Demo Marketplace Data (Recommended for Local Dev & Testing)**:
-   ```bash
-   # Seed realistic interconnected demo data (users, sellers, catalog, Pillow images, orders, payouts)
    python manage.py seed_demo_data
-
-   # Or cleanly purge only demo data and re-seed
-   python manage.py seed_demo_data --reset
    ```
-   **Predictable Demo Credentials** (password for all demo accounts: `DemoPass@123`):
-   | Role | Email | Notes |
-   | :--- | :--- | :--- |
-   | **Super Admin** | `superadmin@demo.galla.store` | Full platform administration & audit logs access |
-   | **Platform Admin** | `admin@demo.galla.store` | Application moderation, COD collection, payouts |
-   | **Active Seller 1** | `seller.malabar@demo.galla.store` | Malabar Spice & Craft Co. (Home & Handicrafts) |
-   | **Active Seller 2** | `seller.cochin@demo.galla.store` | Cochin Tech & Gadgets (Electronics & Audio) |
-   | **Active Seller 3** | `seller.kerala@demo.galla.store` | Kerala Weaves & Apparel (Traditional Fashion) |
-   | **Active Seller 4** | `seller.greenvalley@demo.galla.store` | Green Valley Naturals (Ayurvedic & Wellness) |
-   | **Suspended Seller** | `seller.coastal@demo.galla.store` | Coastal Electronics (Suspended merchant state) |
-   | **Pending Applicant**| `applicant.pending@demo.galla.store` | Apex Home Furnishings (Pending review) |
-   | **Rejected Applicant**| `applicant.rejected@demo.galla.store`| Fly-by-Night Imports (Rejected application) |
-   | **Sample Customer** | `customer.rahul.nair@demo.galla.store` | Active customer with default address & order history |
-   | **Sample Customer** | `customer.ananya.menon@demo.galla.store`| Active customer with multi-vendor orders |
-
-7. **Start development server**:
+5. **Start the Django development server**:
    ```bash
-   python manage.py runserver
+   python manage.py runserver 0.0.0.0:8000
    ```
 
----
+### Frontend Setup
 
-## 11. Database Migrations
-- Check migration state:
-  ```bash
-  python manage.py showmigrations
-  ```
-- Dry run check:
-  ```bash
-  python manage.py makemigrations --check --dry-run
-  ```
-- Apply pending migrations:
-  ```bash
-  python manage.py migrate
-  ```
-
----
-
-## 12. Running Tests
-The suite contains 416 automated tests covering unit, API, integration, and concurrency scenarios.
-- Run entire test suite:
-  ```bash
-  python manage.py test
-  ```
-- Run tests for a specific app:
-  ```bash
-  python manage.py test apps.sellers
-  python manage.py test apps.orders
-  ```
-- Run concurrency tests:
-  ```bash
-  python manage.py test apps.sellers.tests.test_earnings_and_payouts.ConcurrentPayoutTests
-  ```
+1. **Navigate to the frontend directory**:
+   ```bash
+   cd frontend
+   ```
+2. **Install npm dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Start the Vite development server**:
+   ```bash
+   npm run dev
+   ```
+4. Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## 13. API Route Index
+## 9. Running Tests & Quality Assurance
 
-### Authentication & Accounts (`/api/auth/` and `/api/accounts/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register/` | Public | Customer account registration |
-| `POST` | `/api/auth/login/` | Public | Obtain SimpleJWT access & refresh tokens |
-| `POST` | `/api/auth/token/refresh/` | Public | Refresh JWT access token |
-| `GET` | `/api/auth/me/` | Authenticated | Get current authenticated user details |
-| `GET, PUT, PATCH` | `/api/auth/profile/` | Authenticated | Manage customer profile information |
-| `PATCH` | `/api/auth/profile/image/` | Authenticated | Upload customer profile avatar |
-| `GET, POST` | `/api/auth/addresses/` | Authenticated | List and create customer shipping addresses |
-| `GET, PUT, PATCH, DELETE` | `/api/auth/addresses/<uuid:pk>/` | Authenticated | Manage single customer shipping address |
-| `GET` | `/api/auth/admin/customers/` | Platform Admin | List and search all customer accounts |
-| `GET` | `/api/auth/admin/customers/<uuid:pk>/` | Platform Admin | View detailed customer account info |
-| `PATCH` | `/api/auth/admin/customers/<uuid:pk>/status/` | Platform Admin | Activate or deactivate customer account |
+### Backend Automated Test Suite
 
-### Sellers (`/api/sellers/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/sellers/applications/` | Authenticated | Submit vendor onboarding application |
-| `GET` | `/api/sellers/admin/applications/` | Platform Admin | List & filter vendor applications |
-| `PATCH` | `/api/sellers/admin/applications/<uuid:pk>/review/` | Platform Admin | Approve or reject vendor application |
-| `GET` | `/api/sellers/admin/sellers/` | Platform Admin | List all registered seller profiles |
-| `GET` | `/api/sellers/admin/sellers/<uuid:pk>/` | Platform Admin | Inspect specific seller profile details |
-| `PATCH` | `/api/sellers/admin/sellers/<uuid:pk>/status/` | Platform Admin | Suspend or reactivate seller account |
-| `GET` | `/api/sellers/admin/earnings/` | Platform Admin | Platform-wide seller financial summary |
-| `GET` | `/api/sellers/admin/sellers/<uuid:pk>/earnings/` | Platform Admin | Itemized earnings for specific seller |
-| `GET, POST` | `/api/sellers/admin/sellers/<uuid:pk>/payouts/` | Platform Admin | View and record completed seller payouts |
-| `GET, PATCH` | `/api/sellers/profile/` | Active Seller | Manage own vendor store profile |
-| `GET` | `/api/sellers/earnings/dashboard/` | Active Seller | View real-time financial balance dashboard |
-| `GET` | `/api/sellers/earnings/` | Active Seller | List own itemized earnings history |
-| `GET` | `/api/sellers/payouts/` | Active Seller | List own payout transaction history |
+Run the full test suite across all 8 apps (160+ automated test cases):
 
-### Catalog (`/api/catalog/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/catalog/categories/` | Public | List active category hierarchy |
-| `POST` | `/api/catalog/categories/` | Platform Admin | Create product category |
-| `GET` | `/api/catalog/categories/<slug>/` | Public | Retrieve single category details |
-| `PUT, PATCH, DELETE` | `/api/catalog/categories/<slug>/` | Platform Admin | Manage or soft-delete category |
-| `GET` | `/api/catalog/products/` | Public | Browse approved products from active sellers |
-| `GET` | `/api/catalog/products/<slug>/` | Public | Retrieve detailed product information |
-| `GET, POST` | `/api/catalog/seller/products/` | Active Seller | List own products or create new listing |
-| `GET, PUT, PATCH` | `/api/catalog/seller/products/<slug>/` | Active Seller | Retrieve or edit own product |
-| `GET` | `/api/catalog/admin/products/` | Platform Admin | List all products across moderation states |
-| `PATCH` | `/api/catalog/admin/products/<slug>/review/` | Platform Admin | Approve or reject product listing |
-| `GET, POST` | `/api/catalog/seller/products/<slug>/images/` | Active Seller | Manage product photo gallery |
-| `GET, DELETE` | `/api/catalog/seller/products/<slug>/images/<uuid:pk>/` | Active Seller | Retrieve or delete specific gallery photo |
+```bash
+python manage.py test
+```
 
-### Cart (`/api/cart/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/cart/` | Customer | Retrieve customer shopping cart |
-| `POST` | `/api/cart/items/` | Customer | Add item to cart with stock validation |
-| `PATCH, DELETE` | `/api/cart/items/<uuid:pk>/` | Customer | Update quantity or remove cart item |
+To run tests for specific modules:
 
-### Orders (`/api/orders/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/orders/checkout/` | Customer | Convert cart to order with atomic stock deduction |
-| `GET` | `/api/orders/` | Customer | List customer order history |
-| `GET` | `/api/orders/<uuid:pk>/` | Customer | Retrieve customer order details |
-| `POST` | `/api/orders/<uuid:order_id>/items/<uuid:item_id>/cancel/` | Customer | Cancel pending order item with inventory restore |
-| `GET` | `/api/orders/seller/` | Active Seller | List incoming order items for authenticated seller |
-| `GET` | `/api/orders/seller/<uuid:pk>/` | Active Seller | View order item fulfillment details |
-| `PATCH` | `/api/orders/seller/<uuid:pk>/status/` | Active Seller | Advance item fulfillment status |
-| `GET` | `/api/orders/admin/` | Platform Admin | List and filter all platform orders |
-| `GET` | `/api/orders/admin/<uuid:pk>/` | Platform Admin | Administrative order deep inspection |
+```bash
+# Catalog & recursive filters
+python manage.py test apps.catalog
 
-### Payments (`/api/payments/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/payments/` | Customer | View customer payment history |
-| `GET` | `/api/payments/<uuid:pk>/` | Customer | View payment record and attempt traces |
-| `POST` | `/api/payments/<uuid:pk>/mock-process/` | Customer | Process mock online payment (outcome: successful/failed) |
-| `GET` | `/api/payments/admin/` | Platform Admin | List all platform payments |
-| `GET` | `/api/payments/admin/<uuid:pk>/` | Platform Admin | Administrative view of payment details |
-| `POST` | `/api/payments/admin/<uuid:pk>/confirm-cod/` | Platform Admin | Confirm physical cash collection for COD order |
+# Orders & concurrency checkout
+python manage.py test apps.orders
 
-### Audit & Operations (`/api/audit/` and `/api/admin/`)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/audit/` | Superadmin | Query application-level append-only audit event stream |
-| `GET` | `/api/admin/dashboard/` | Platform Admin | Executive real-time marketplace metrics |
+# Payments & COD risk rules
+python manage.py test apps.payments
+
+# Sellers & payout ledger
+python manage.py test apps.sellers
+```
+
+### Frontend Linting & Production Build
+
+Validate code style, dependencies, and bundle compilation:
+
+```bash
+cd frontend
+
+# Run ESLint validation
+npm run lint
+
+# Compile production bundle
+npm run build
+```
 
 ---
 
-## 14. Accounts Module Reference
-Detailed documentation: [apps/accounts/doc.txt](apps/accounts/doc.txt)
-Provides custom email-based authentication, user role hierarchies, user profiles, address books, and administrative customer controls.
+## 10. Audit & Financial Ledger Specifications
 
-## 15. Sellers Module Reference
-Detailed documentation: [apps/sellers/doc.txt](apps/sellers/doc.txt)
-Manages vendor onboarding applications, store profiles, 5% commission earnings tracking, and race-safe administrative manual payout recording.
+### Marketplace Commission Calculation
 
-## 16. Catalog Module Reference
-Detailed documentation: [apps/catalog/doc.txt](apps/catalog/doc.txt)
-Handles hierarchical categories, seller product listings, multi-photo galleries, administrative moderation workflows, and public catalog visibility controls.
+- Applied when an `OrderItem` transitions to `DELIVERED` and associated payment is `SUCCESSFUL`.
+- **Commission Rate**: Fixed 5% (`COMMISSION_RATE = Decimal("0.0500")`).
+- **Rounding Policy**: Quantized to 2 decimal places using `ROUND_HALF_UP`:
+  $$\text{Commission} = (\text{Item Subtotal} \times 0.05).\text{quantize}(\text{Decimal}("0.01"), \text{ROUND\_HALF\_UP})$$
+  $$\text{Net Earning} = \text{Item Subtotal} - \text{Commission}$$
+- `SellerEarning` records are created idempotently via `get_or_create` with a `OneToOneField` on `OrderItem`.
 
-## 17. Cart Module Reference
-Detailed documentation: [apps/cart/doc.txt](apps/cart/doc.txt)
-Implements server-side shopping carts with real-time stock validation, duplicate rejection, and multi-vendor product coexistence.
+### Payout Balance Invariant
 
-## 18. Orders Module Reference
-Detailed documentation: [apps/orders/doc.txt](apps/orders/doc.txt)
-Orchestrates atomic inventory checkout, immutable snapshotting, multi-vendor fulfillment state machines, customer cancellations, and status aggregation.
-
-## 19. Payments Module Reference
-Detailed documentation: [apps/payments/doc.txt](apps/payments/doc.txt)
-Tracks order payments, mock gateway executions, payment attempt ledgers, and administrative COD cash collection confirmation.
-
-## 20. Audit Module Reference
-Detailed documentation: [apps/audit/doc.txt](apps/audit/doc.txt)
-Provides an application-level append-only audit event repository protected by model instance methods (with QuerySet and raw SQL limitations documented), sensitive field sanitization, and superadmin telemetry queries.
-
-## 21. Common Module Reference
-Detailed documentation: [apps/common/doc.txt](apps/common/doc.txt)
-Supplies global RBAC permissions (`IsPlatformAdmin`, `IsActiveSeller`), executive dashboard analytics, custom Django Admin portal styling, and the modular demo database seeder (`python manage.py seed_demo_data`).
+For any given seller at any time:
+$$\text{Pending Payout Balance} = \sum \text{Net Earnings} - \sum \text{Completed Payouts}$$
+Administrative payouts lock the `SellerProfile` row with `select_for_update()`, preventing concurrent overdraft payouts.
 
 ---
 
-## 22. Admin Dashboard & Operations
-- **Django Admin Portal**: Accessible at `/admin/`, styled via `GallaAdminSite` with custom headers and registered models.
-- **REST Analytics Endpoint**: `GET /api/admin/dashboard/` returns live metrics for customers, sellers, catalog, orders, and payment volumes.
+## 11. Module Documentation References
 
----
+For in-depth domain specifications, schema diagrams, and endpoint contracts, refer to the individual module documents:
 
-## 23. Code Quality & Standards
-- Modular application boundaries separating domain models, serializers, views, and services.
-- Structured DRF serializers handling input validation and serialization.
-- Explicit exception handling mapping domain errors to appropriate HTTP status codes (400, 401, 403, 404).
-- Database-level integrity constraints (CheckConstraints, UniqueConstraints, PROTECT on foreign keys).
-
----
-
-## 24. Known Limitations & MVP Scope Boundaries
-The following features are intentionally out of scope for the MVP:
-1. Live Razorpay payment gateway integration (mock process endpoint is active).
-2. Automated bank payout rails (e.g. Razorpay Route / Stripe Connect).
-3. Seller digital wallets and complex balance transfers.
-4. Real-time courier/shipping carrier API integration.
-5. Automated returns and refunds lifecycle (RMA).
-6. Multi-tier or category-specific commission rates (fixed 5% commission applied).
-7. External email/SMS notification dispatchers (console email backend configured).
-
----
-
-## 25. Links to Module Documentation
 - [Accounts Module Documentation](apps/accounts/doc.txt)
 - [Sellers Module Documentation](apps/sellers/doc.txt)
 - [Catalog Module Documentation](apps/catalog/doc.txt)

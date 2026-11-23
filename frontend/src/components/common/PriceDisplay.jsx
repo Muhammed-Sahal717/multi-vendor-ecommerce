@@ -3,8 +3,8 @@ export const PriceDisplay = ({
   originalPrice,
   currency = 'INR',
   className = '',
-  priceClassName = 'text-lg font-bold text-neutral-900',
-  originalPriceClassName = 'text-sm text-neutral-400 line-through',
+  priceClassName = 'text-lg font-bold text-foreground',
+  originalPriceClassName = 'text-sm text-muted-foreground line-through',
 }) => {
   const formatPrice = (amount) => {
     if (amount === undefined || amount === null || isNaN(Number(amount))) {

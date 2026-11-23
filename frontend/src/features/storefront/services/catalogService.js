@@ -3,8 +3,8 @@ import { API_ENDPOINTS } from '../../../lib/constants.js';
 
 export const catalogService = {
   // Categories
-  getCategories: async () => {
-    const response = await apiClient.get(API_ENDPOINTS.CATALOG.CATEGORIES);
+  getCategories: async (params = {}) => {
+    const response = await apiClient.get(API_ENDPOINTS.CATALOG.CATEGORIES, { params });
     return response.data;
   },
 

@@ -8,6 +8,7 @@ import {
   ChevronUp,
   AlertCircle,
   Loader2,
+  Truck,
 } from 'lucide-react';
 import { Card } from '../../../components/ui/card.jsx';
 import { Button } from '../../../components/ui/button.jsx';
@@ -36,22 +37,45 @@ export const CheckoutOrderSummary = ({
   const canPlaceOrder = !!selectedAddressId && !!selectedPaymentMethod && !isSubmitting && totalItems > 0;
 
   return (
-    <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm sticky top-24 space-y-6">
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <h2 className="text-lg font-bold text-foreground">Order Summary</h2>
-        <span className="text-xs font-semibold text-muted-foreground">
+    <Card className="rounded-3xl border border-border/60 bg-card p-6 shadow-sm sticky top-24 space-y-5">
+      <div className="flex items-center justify-between border-b border-border/60 pb-4">
+        <div>
+          <h2 className="text-lg font-black text-foreground font-heading">Order Summary</h2>
+          <p className="text-xs text-muted-foreground">Final price breakdown</p>
+        </div>
+        <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2.5 py-0.5 text-xs font-bold text-foreground">
           {totalItems} {totalItems === 1 ? 'item' : 'items'}
         </span>
       </div>
 
+      {/* Free Shipping Status Badge */}
+      <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <Truck size={15} className={isFreeShipping ? 'text-emerald-500' : 'text-primary'} />
+          <span className="text-muted-foreground font-medium">Delivery:</span>
+        </div>
+        {isFreeShipping ? (
+          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+            Free Shipping Unlocked!
+          </span>
+        ) : (
+          <span className="font-medium text-muted-foreground">
+            Standard: <PriceDisplay price={STANDARD_SHIPPING_FEE} size="sm" className="font-bold text-foreground" />
+          </span>
+        )}
+      </div>
+
       {/* Collapsible Items Preview */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <button
           type="button"
           onClick={() => setShowItemsList((prev) => !prev)}
-          className="flex w-full items-center justify-between text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+          className="flex w-full items-center justify-between text-xs font-bold text-foreground/80 hover:text-foreground cursor-pointer py-1"
         >
-          <span>Review Items ({items.length})</span>
+          <span className="flex items-center gap-1.5">
+            <Package size={13} className="text-primary" />
+            <span>Review Items ({items.length})</span>
+          </span>
           {showItemsList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
 
@@ -60,8 +84,11 @@ export const CheckoutOrderSummary = ({
             {items.map((item) => {
               const imgUrl = getProductImageUrl(item) || getProductImageUrl(item?.primary_image || item?.image);
               return (
-                <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-2 text-xs">
-                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-2.5 text-xs transition-colors"
+                >
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-muted/40">
                     {imgUrl ? (
                       <img
                         src={imgUrl}
@@ -75,14 +102,14 @@ export const CheckoutOrderSummary = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="line-clamp-1 font-semibold text-foreground">
+                    <p className="line-clamp-1 font-bold text-foreground">
                       {item.product_name}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       Qty: {item.quantity} × <PriceDisplay price={item.product_price} size="sm" />
                     </p>
                   </div>
-                  <div className="text-right font-bold text-foreground shrink-0">
+                  <div className="text-right font-black text-foreground shrink-0 font-heading">
                     <PriceDisplay price={item.subtotal || (parseFloat(item.product_price) * item.quantity)} size="sm" />
                   </div>
                 </div>
@@ -93,38 +120,38 @@ export const CheckoutOrderSummary = ({
       </div>
 
       {/* Price Calculations */}
-      <div className="space-y-3 text-sm border-t border-border pt-4">
-        <div className="flex items-center justify-between text-muted-foreground text-xs">
+      <div className="space-y-3 text-xs border-t border-border/60 pt-4">
+        <div className="flex items-center justify-between text-muted-foreground">
           <span>Items Subtotal</span>
-          <PriceDisplay price={totalPrice} size="sm" className="font-semibold text-foreground" />
+          <PriceDisplay price={totalPrice} size="sm" className="font-bold text-foreground" />
         </div>
 
-        <div className="flex items-center justify-between text-muted-foreground text-xs">
-          <span>Shipping & Handling</span>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Delivery Charges</span>
           {shippingFee === 0 ? (
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            <span className="font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 text-[11px]">
               Free Delivery
             </span>
           ) : (
-            <PriceDisplay price={shippingFee} size="sm" className="font-semibold text-foreground" />
+            <PriceDisplay price={shippingFee} size="sm" className="font-bold text-foreground" />
           )}
         </div>
 
-        <div className="flex items-center justify-between text-muted-foreground text-xs">
-          <span>Taxes</span>
-          <span className="text-xs font-medium text-muted-foreground">Included in MRP</span>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Estimated GST & Taxes</span>
+          <span className="font-medium text-muted-foreground">Included in MRP</span>
         </div>
 
-        <div className="border-t border-border pt-3">
+        <div className="border-t border-border/60 pt-3">
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-sm font-bold text-foreground">Total Payable</span>
-              <p className="text-[10px] text-muted-foreground">Inclusive of all taxes</p>
+              <span className="text-sm font-black text-foreground font-heading">Total Payable</span>
+              <p className="text-[10px] text-muted-foreground">Inclusive of all local taxes</p>
             </div>
             <PriceDisplay
               price={finalTotal}
               size="lg"
-              className="font-extrabold text-primary text-xl"
+              className="font-black text-foreground text-2xl font-heading"
             />
           </div>
         </div>
@@ -132,20 +159,20 @@ export const CheckoutOrderSummary = ({
 
       {/* Error alert if any */}
       {errorMessage && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
           <AlertCircle size={15} className="shrink-0 mt-0.5" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {/* Place Order CTA */}
-      <div className="space-y-2">
+      <div className="space-y-2 pt-1">
         <Button
           type="button"
           size="lg"
           onClick={onPlaceOrder}
           disabled={!canPlaceOrder}
-          className="w-full h-12 rounded-xl text-sm font-bold shadow-md gap-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-all hover:translate-y-[-1px] active:translate-y-[0px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-12 rounded-2xl text-xs sm:text-sm font-bold shadow-md shadow-primary/25 gap-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-all hover:translate-y-[-1px] active:translate-y-[0px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <>
@@ -161,21 +188,21 @@ export const CheckoutOrderSummary = ({
         </Button>
 
         {!selectedAddressId && (
-          <p className="text-center text-[11px] font-medium text-amber-600 dark:text-amber-400">
+          <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-400">
             Please select or add a shipping address to proceed
           </p>
         )}
       </div>
 
       {/* Trust badges */}
-      <div className="space-y-2 border-t border-border pt-4 text-[11px] text-muted-foreground">
+      <div className="space-y-2 border-t border-border/60 pt-4 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-2">
-          <Lock size={13} className="text-primary shrink-0" />
-          <span>256-bit SSL encrypted secure checkout</span>
+          <Lock size={12} className="text-primary shrink-0" />
+          <span>256-bit SSL encrypted safe checkout</span>
         </div>
         <div className="flex items-center gap-2">
-          <ShieldCheck size={13} className="text-primary shrink-0" />
-          <span>7-day easy returns & money-back guarantee</span>
+          <ShieldCheck size={12} className="text-primary shrink-0" />
+          <span>7-day easy returns & verified buyer protection</span>
         </div>
       </div>
     </Card>

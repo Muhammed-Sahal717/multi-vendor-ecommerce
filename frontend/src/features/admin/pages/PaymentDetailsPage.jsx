@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -28,6 +29,8 @@ export const PaymentDetailsPage = () => {
   const { id } = useParams();
   const queryClient = useQueryClient();
 
+  const [confirmError, setConfirmError] = useState('');
+
   const { data: payment, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.payments.adminDetail(id),
     queryFn: () => adminService.getPayment(id),
@@ -38,6 +41,15 @@ export const PaymentDetailsPage = () => {
     mutationFn: () => adminService.confirmCodCollection(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
+      setConfirmError('');
+    },
+    onError: (err) => {
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to confirm COD collection. Ensure the order has been delivered.';
+      setConfirmError(msg);
     },
   });
 
@@ -76,10 +88,16 @@ export const PaymentDetailsPage = () => {
     );
   }
 
-  const isCod = payment.payment_method?.toLowerCase() === 'cod';
-  const isCompleted = ['completed', 'success', 'paid'].includes(payment.status?.toLowerCase());
+  const isCod = (payment.method || payment.payment_method)?.toLowerCase() === 'cod';
+  const isCompleted = ['completed', 'successful', 'success', 'paid'].includes(payment.status?.toLowerCase());
   const needsCodConfirm = isCod && !isCompleted;
   const attempts = payment.attempts || [];
+
+  const orderNumber = payment.order_number || (typeof payment.order === 'object' && payment.order !== null ? payment.order.order_number || payment.order.id?.slice(0, 8) : payment.order) || 'N/A';
+  const orderId = payment.order_id || (typeof payment.order === 'object' && payment.order !== null ? payment.order.id : payment.order);
+  const customerName = typeof payment.customer === 'object' && payment.customer !== null
+    ? `${payment.customer.first_name || ''} ${payment.customer.last_name || ''}`.trim() || payment.customer.email
+    : payment.customer_name || payment.customer_email || payment.user?.email || 'Customer';
 
   return (
     <div className="space-y-6">
@@ -150,7 +168,10 @@ export const PaymentDetailsPage = () => {
               <Button
                 size="sm"
                 disabled={confirmCodMutation.isPending}
-                onClick={() => confirmCodMutation.mutate()}
+                onClick={() => {
+                  setConfirmError('');
+                  confirmCodMutation.mutate();
+                }}
                 className="rounded-xl font-bold bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-3 gap-1.5 shadow-2xs cursor-pointer"
               >
                 {confirmCodMutation.isPending ? (
@@ -164,6 +185,13 @@ export const PaymentDetailsPage = () => {
           </div>
         </div>
 
+        {confirmError && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-3 text-xs text-destructive font-medium flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0" />
+            <span>{confirmError}</span>
+          </div>
+        )}
+
         {/* Transaction Details Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-1">
@@ -172,12 +200,16 @@ export const PaymentDetailsPage = () => {
               <span>Associated Order</span>
             </span>
             <p className="font-bold text-foreground">
-              <Link
-                to={ROUTE_PATHS.ADMIN.ORDER_DETAILS(payment.order || payment.order_id)}
-                className="hover:underline text-primary"
-              >
-                Order #{payment.order_number || payment.order || 'N/A'}
-              </Link>
+              {orderId ? (
+                <Link
+                  to={ROUTE_PATHS.ADMIN.ORDER_DETAILS(orderId)}
+                  className="hover:underline text-primary"
+                >
+                  Order #{orderNumber}
+                </Link>
+              ) : (
+                <span className="text-foreground">Order #{orderNumber}</span>
+              )}
             </p>
           </div>
 
@@ -187,7 +219,7 @@ export const PaymentDetailsPage = () => {
               <span>Customer</span>
             </span>
             <p className="font-bold text-foreground truncate">
-              {payment.customer_name || payment.customer_email || 'Customer'}
+              {customerName}
             </p>
           </div>
 
